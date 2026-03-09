@@ -1,0 +1,19 @@
+# IDE / 工具配置
+.codebuddy/
+.vscode/
+
+# 虚拟环境
+# mvp1的虚拟环境
+mvps/mvp1/venv/
+# 根目录的虚拟环境
+venv/
+
+# mvp1 - Python 缓存
+mvps/mvp1/__pycache__/
+mvps/mvp1/perfa_mvp1/__pycache__/
+
+# mvp1 - 环境变量（含密钥）
+mvps/mvp1/.env
+
+# mvp1 - 运行时数据库
+mvps/mvp1/perfa.db

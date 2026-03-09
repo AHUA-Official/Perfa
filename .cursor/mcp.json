@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "perfa-mvp1": {
+      "command": "e:\\Perfa\\mvps\\mvp1\\venv\\Scripts\\python.exe",
+      "args": [
+        "e:\\Perfa\\mvps\\mvp1\\mcp_server.py"
+      ]
+    }
+  }
+}
