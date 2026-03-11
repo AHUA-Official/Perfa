@@ -1,0 +1,47 @@
+#!/bin/bash
+# Perfa 全栈停止脚本
+# 停止顺序: Node Agent -> Grafana -> Victoria Metrics
+
+set -e
+
+echo "================================================"
+echo "    Perfa 全栈停止"
+echo "================================================"
+echo ""
+
+# 1. 停止 Node Agent
+echo "[1/3] 停止 Node Agent..."
+if pgrep -f "python3 main.py" > /dev/null; then
+    pkill -f "python3 main.py"
+    sleep 1
+    echo "      ✅ Node Agent 已停止"
+else
+    echo "      Node Agent 未运行"
+fi
+echo ""
+
+# 2. 停止 Grafana
+echo "[2/3] 停止 Grafana..."
+if sudo docker ps | grep -q grafana; then
+    sudo docker stop grafana > /dev/null 2>&1
+    sudo docker rm grafana > /dev/null 2>&1
+    echo "      ✅ Grafana 已停止"
+else
+    echo "      Grafana 未运行"
+fi
+echo ""
+
+# 3. 停止 Victoria Metrics
+echo "[3/3] 停止 Victoria Metrics..."
+if sudo docker ps | grep -q victoria-metrics; then
+    sudo docker stop victoria-metrics > /dev/null 2>&1
+    sudo docker rm victoria-metrics > /dev/null 2>&1
+    echo "      ✅ Victoria Metrics 已停止"
+else
+    echo "      Victoria Metrics 未运行"
+fi
+echo ""
+
+echo "================================================"
+echo "    全部服务已停止"
+echo "================================================"

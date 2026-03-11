@@ -1,0 +1,4 @@
+# Dashboard 自动加载配置（暂时禁用，手动导入）
+apiVersion: 1
+
+providers: []

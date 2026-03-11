@@ -1,0 +1,15 @@
+# Victoria Metrics 抓取配置
+# 放置位置: /home/ubuntu/Perfa/src/node_agent/config/vm_scrape.yml
+
+global:
+  scrape_interval: 5s  # 每5秒抓取一次
+  scrape_timeout: 3s
+
+scrape_configs:
+  # Node Agent 指标抓取
+  - job_name: 'node-agent'
+    static_configs:
+      - targets: ['172.17.0.1:8000']  # Docker 网桥网关，访问宿主机
+        labels:
+          agent_id: 'node-agent-001'
+          environment: 'development'
