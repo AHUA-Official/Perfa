@@ -24,6 +24,15 @@ mvps/mvp1/perfa.db
 # node_agent
 src/node_agent/__pycache__/
 src/node_agent/monitor/__pycache__/
+src/node_agent/tool/__pycache__/
+
+# tool 编译产物
+src/node_agent/tool/binaries/
+# tool 解压后的源码目录（保留压缩包）
+src/node_agent/tool/sources/cpu/superpi/
+src/node_agent/tool/sources/cpu/unixbench/
+src/node_agent/tool/sources/mem/Linux/
+src/node_agent/tool/sources/mem/Windows/
 
 # 数据存储
 data/
@@ -41,3 +50,6 @@ Thumbs.db
 # 压缩包
 *.tar.gz
 *.zip
+
+# 测试文件
+pi*.txt

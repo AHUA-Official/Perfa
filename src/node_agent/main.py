@@ -10,6 +10,7 @@ from typing import Optional
 from prometheus_client import start_http_server
 
 from monitor import Monitor
+from tool.manager import ToolManager
 
 # 配置日志
 logging.basicConfig(
@@ -38,6 +39,7 @@ class NodeAgent:
         
         # 各个功能模块
         self.monitor: Optional[Monitor] = None
+        self.tool_manager: Optional[ToolManager] = None
         
         # 运行状态
         self.running = False
@@ -56,6 +58,9 @@ class NodeAgent:
         
         # 启动监控模块
         self._start_monitor()
+        
+        # 初始化工具管理器
+        self._init_tool_manager()
         
         self.running = True
         logger.info("节点 Agent 已启动")
@@ -93,6 +98,17 @@ class NodeAgent:
         
         self.monitor.start()
         logger.info("监控模块已启动")
+    
+    def _init_tool_manager(self):
+        """初始化工具管理器"""
+        logger.info("初始化工具管理器...")
+        self.tool_manager = ToolManager()
+        
+        # 检查所有工具状态
+        status = self.tool_manager.check_all(verify=True)
+        logger.info(f"工具状态: {status['count']} 个工具")
+        for tool in status['tools']:
+            logger.info(f"  - {tool['tool']}: {tool['status']} (verified: {tool.get('verified')})")
 
 
 def signal_handler(signum, frame):
