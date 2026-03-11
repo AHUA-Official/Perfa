@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
 守护进程 Agent 主入口
+
+架构：多线程（非多进程）
+- Main Thread: 主循环 + 将来 HTTP API Server
+- Monitoring Thread: 监控采集（daemon）
+- Prometheus: 指标 HTTP 服务（后台线程）
+- TaskExecutor（待实现）: 任务执行线程
 """
 
 import sys
 import signal
+import time
 import logging
 from typing import Optional
 from prometheus_client import start_http_server
@@ -50,17 +57,17 @@ class NodeAgent:
     def start(self):
         """启动 Agent"""
         logger.info("="*50)
-        logger.info("启动节点 Agent")
+        logger.info("启动节点 Agent（多线程架构）")
         logger.info("="*50)
         
-        # 启动 Prometheus metrics HTTP 服务
+        # 1. 注册并启动工具管理器
+        self._register_tools()
+        
+        # 2. 启动 Prometheus metrics HTTP 服务
         self._start_metrics_server()
         
-        # 启动监控模块
+        # 3. 启动监控模块（后台线程）
         self._start_monitor()
-        
-        # 初始化工具管理器
-        self._init_tool_manager()
         
         self.running = True
         logger.info("节点 Agent 已启动")
