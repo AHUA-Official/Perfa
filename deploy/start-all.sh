@@ -65,7 +65,9 @@ else
     
     sleep 2
     if pgrep -f "python3 main.py" > /dev/null; then
-        echo "      ✅ Node Agent 启动成功 (端口 8000)"
+        echo "      ✅ Node Agent 启动成功"
+        echo "         - 控制面板: http://localhost:8080"
+        echo "         - Prometheus: http://localhost:8000/metrics"
     else
         echo "      ❌ Node Agent 启动失败，查看日志: tail -f /tmp/agent.log"
         exit 1
@@ -118,6 +120,8 @@ echo "    全部服务启动完成！"
 echo "================================================"
 echo ""
 echo "访问地址:"
+echo "  - 控制面板: http://localhost:8080/"
+echo "  - Agent API: http://localhost:8080/health"
 echo "  - Victoria Metrics: http://localhost:8428"
 echo "  - Victoria Metrics UI: http://localhost:8428/vmui"
 echo "  - Grafana: http://localhost:3000 (admin/admin123)"

@@ -3,10 +3,10 @@
 守护进程 Agent 主入口
 
 架构：多线程（非多进程）
-- Main Thread: 主循环 + 将来 HTTP API Server
+- Main Thread: 主循环 + HTTP API Server
 - Monitoring Thread: 监控采集（daemon）
 - Prometheus: 指标 HTTP 服务（后台线程）
-- TaskExecutor（待实现）: 任务执行线程
+- BenchmarkExecutor: 压测任务执行器
 """
 
 import sys
@@ -18,6 +18,8 @@ from prometheus_client import start_http_server
 
 from monitor import Monitor
 from tool.manager import ToolManager
+from api.server import APIServer
+from benchmark.executor import BenchmarkExecutor
 
 # 配置日志
 logging.basicConfig(
@@ -33,26 +35,31 @@ logger = logging.getLogger(__name__)
 
 class NodeAgent:
     
-    def __init__(self, agent_id: str = "node-agent-001", metrics_port: int = 8000):
+    def __init__(self, agent_id: str = "node-agent-001", metrics_port: int = 8000, api_port: int = 8080):
         """
         初始化节点 Agent
         
         Args:
             agent_id: Agent 唯一标识
             metrics_port: Prometheus 指标暴露端口
+            api_port: HTTP API 服务端口
         """
         self.agent_id = agent_id
         self.metrics_port = metrics_port
+        self.api_port = api_port
         
         # 各个功能模块
         self.monitor: Optional[Monitor] = None
         self.tool_manager: Optional[ToolManager] = None
+        self.benchmark_executor: Optional[BenchmarkExecutor] = None
+        self.api_server: Optional[APIServer] = None
         
         # 运行状态
         self.running = False
         
         logger.info(f"节点 Agent 初始化: {agent_id}")
         logger.info(f"指标端口: {metrics_port}")
+        logger.info(f"API 端口: {api_port}")
     
     def start(self):
         """启动 Agent"""
@@ -60,14 +67,20 @@ class NodeAgent:
         logger.info("启动节点 Agent（多线程架构）")
         logger.info("="*50)
         
-        # 1. 注册并启动工具管理器
-        self._register_tools()
+        # 1. 初始化工具管理器
+        self._init_tool_manager()
         
-        # 2. 启动 Prometheus metrics HTTP 服务
+        # 2. 初始化压测执行器
+        self._init_benchmark_executor()
+        
+        # 3. 启动 Prometheus metrics HTTP 服务
         self._start_metrics_server()
         
-        # 3. 启动监控模块（后台线程）
+        # 4. 启动监控模块（后台线程）
         self._start_monitor()
+        
+        # 5. 启动 HTTP API 服务器
+        self._start_api_server()
         
         self.running = True
         logger.info("节点 Agent 已启动")
@@ -81,6 +94,10 @@ class NodeAgent:
     def stop(self):
         """停止 Agent"""
         logger.info("停止节点 Agent...")
+        
+        # 停止压测执行器
+        if self.benchmark_executor:
+            self.benchmark_executor.shutdown()
         
         # 停止监控模块
         if self.monitor:
@@ -116,6 +133,33 @@ class NodeAgent:
         logger.info(f"工具状态: {status['count']} 个工具")
         for tool in status['tools']:
             logger.info(f"  - {tool['tool']}: {tool['status']} (verified: {tool.get('verified')})")
+    
+    def _init_benchmark_executor(self):
+        """初始化压测执行器"""
+        logger.info("初始化压测执行器...")
+        self.benchmark_executor = BenchmarkExecutor(
+            tool_manager=self.tool_manager
+        )
+        
+        # 注册运行器
+        from benchmark.runners import FioRunner, StreamRunner, UnixBenchRunner
+        self.benchmark_executor.register_runner(FioRunner())
+        self.benchmark_executor.register_runner(StreamRunner())
+        self.benchmark_executor.register_runner(UnixBenchRunner())
+        
+        logger.info("压测执行器已初始化")
+    
+    def _start_api_server(self):
+        """启动 HTTP API 服务器"""
+        logger.info(f"启动 HTTP API 服务器: http://0.0.0.0:{self.api_port}")
+        self.api_server = APIServer(
+            agent=self,
+            host="0.0.0.0",
+            port=self.api_port
+        )
+        # 在后台线程启动
+        self.api_server.run_background()
+        logger.info("HTTP API 服务器已启动")
 
 
 def signal_handler(signum, frame):
@@ -142,9 +186,18 @@ def main():
     # 创建并启动 agent
     agent = NodeAgent(
         agent_id="node-agent-001",
-        metrics_port=8000  # Prometheus 指标端口
+        metrics_port=8000,  # Prometheus 指标端口
+        api_port=8080       # HTTP API 端口
     )
     agent.start()
+    
+    # 打印访问信息
+    logger.info("="*50)
+    logger.info("服务访问地址:")
+    logger.info(f"  - 控制面板: http://localhost:8080/")
+    logger.info(f"  - API 文档: http://localhost:8080/health")
+    logger.info(f"  - Prometheus: http://localhost:8000/metrics")
+    logger.info("="*50)
     
     # 保持主线程运行
     try:

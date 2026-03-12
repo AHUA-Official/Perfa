@@ -12,8 +12,15 @@ echo ""
 # 1. 停止 Node Agent
 echo "[1/3] 停止 Node Agent..."
 if pgrep -f "python3 main.py" > /dev/null; then
-    pkill -f "python3 main.py"
-    sleep 1
+    # 先发送 SIGTERM 优雅停止
+    pkill -TERM -f "python3 main.py"
+    sleep 2
+    
+    # 如果还在运行，强制杀死
+    if pgrep -f "python3 main.py" > /dev/null; then
+        pkill -9 -f "python3 main.py"
+        sleep 1
+    fi
     echo "      ✅ Node Agent 已停止"
 else
     echo "      Node Agent 未运行"

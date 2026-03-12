@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NodeAgent Control Panel</title>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --radius: 8px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-100); color: var(--gray-800); line-height: 1.6; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, var(--primary), #2563eb); color: white; padding: 20px 0; margin-bottom: 24px; box-shadow: var(--shadow); }
+        .header-content { display: flex; justify-content: space-between; align-items: center; max-width: 1400px; margin: 0 auto; padding: 0 20px; }
+        .header h1 { font-size: 24px; }
+        .status-badge { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px; font-size: 14px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: white; padding: 8px; border-radius: var(--radius); box-shadow: var(--shadow); }
+        .tab-btn { flex: 1; padding: 12px 24px; border: none; background: transparent; color: var(--gray-500); font-size: 14px; cursor: pointer; border-radius: var(--radius); transition: all 0.2s; }
+        .tab-btn:hover { background: var(--gray-100); }
+        .tab-btn.active { background: var(--primary); color: white; }
+        
+        .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; }
+        .card-header { padding: 16px 20px; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+        .card-title { font-size: 16px; font-weight: 600; }
+        .card-body { padding: 20px; }
+        
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        @media (max-width: 1024px) { .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 640px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+        
+        .stat-card { background: linear-gradient(135deg, var(--gray-50), white); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 16px; }
+        .stat-label { font-size: 12px; color: var(--gray-500); text-transform: uppercase; margin-bottom: 4px; }
+        .stat-value { font-size: 24px; font-weight: 700; }
+        .stat-unit { font-size: 14px; color: var(--gray-500); font-weight: 400; }
+        .stat-bar { height: 6px; background: var(--gray-200); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+        .stat-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .stat-bar-fill.green { background: var(--success); }
+        .stat-bar-fill.yellow { background: var(--warning); }
+        .stat-bar-fill.red { background: var(--danger); }
+        
+        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: none; border-radius: var(--radius); font-size: 14px; cursor: pointer; transition: all 0.2s; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: #2563eb; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-outline { background: white; border: 1px solid var(--gray-200); color: var(--gray-700); }
+        .btn-outline:hover:not(:disabled) { background: var(--gray-50); }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+        .form-input, .form-select { width: 100%; padding: 10px 14px; border: 1px solid var(--gray-200); border-radius: var(--radius); font-size: 14px; }
+        .form-input:focus, .form-select:focus { outline: none; border-color: var(--primary); }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--gray-200); }
+        th { font-size: 12px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; background: var(--gray-50); }
+        td { font-size: 14px; }
+        tr:hover td { background: var(--gray-50); }
+        
+        .badge { display: inline-flex; align-items: center; padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 20px; }
+        .badge-success { background: rgba(34, 197, 94, 0.1); color: var(--success); }
+        .badge-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        .badge-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .badge-info { background: rgba(59, 130, 246, 0.1); color: var(--primary); }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .tool-card { border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+        .tool-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .tool-name { font-weight: 600; }
+        .tool-category { font-size: 12px; color: var(--gray-500); }
+        .tool-info { font-size: 13px; color: var(--gray-700); margin-bottom: 12px; }
+        
+        pre { background: var(--gray-800); color: #f3f4f6; padding: 16px; border-radius: var(--radius); overflow-x: auto; font-family: Monaco, monospace; font-size: 13px; max-height: 400px; }
+        
+        .alert { padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; }
+        .alert-info { background: rgba(59, 130, 246, 0.1); color: var(--primary); }
+        .alert-success { background: rgba(34, 197, 94, 0.1); color: var(--success); }
+        .alert-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        
+        .loading { display: flex; align-items: center; justify-content: center; padding: 40px; }
+        .spinner { width: 32px; height: 32px; border: 3px solid var(--gray-200); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.3s; }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal { background: white; border-radius: var(--radius); width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; }
+        .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 20px; }
+        .modal-close { background: none; border: none; font-size: 24px; color: var(--gray-500); cursor: pointer; }
+        
+        .empty-state { text-align: center; padding: 40px; color: var(--gray-500); }
+        
+        .progress-bar { height: 8px; background: var(--gray-200); border-radius: 4px; overflow: hidden; margin: 8px 0; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); transition: width 0.3s; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <h1>NodeAgent Control Panel</h1>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                <span id="agent-status">连接中...</span>
+            </div>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="dashboard">仪表盘</button>
+            <button class="tab-btn" data-tab="tools">工具管理</button>
+            <button class="tab-btn" data-tab="benchmark">压测任务</button>
+            <button class="tab-btn" data-tab="storage">存储管理</button>
+        </div>
+        
+        <div id="dashboard" class="tab-content active">
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">系统状态</h3>
+                        <button class="btn btn-outline btn-sm" onclick="refreshSystemStatus()">刷新</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid-4" id="system-stats"><div class="loading"><div class="spinner"></div></div></div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header"><h3 class="card-title">监控控制</h3></div>
+                    <div class="card-body">
+                        <div id="monitor-status" class="alert alert-info">加载中...</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">采集间隔 (秒)</label>
+                                <input type="number" class="form-input" id="monitor-interval" value="5" min="1" max="60">
+                            </div>
+                        </div>
+                        <button class="btn btn-success" id="btn-start-monitor" onclick="startMonitor()">启动监控</button>
+                        <button class="btn btn-danger" id="btn-stop-monitor" onclick="stopMonitor()" style="display:none;">停止监控</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header"><h3 class="card-title">系统信息</h3></div>
+                <div class="card-body">
+                    <div id="system-info" class="loading"><div class="spinner"></div></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="tools" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">压测工具</h3>
+                    <button class="btn btn-outline btn-sm" onclick="refreshTools()">刷新</button>
+                </div>
+                <div class="card-body">
+                    <div id="tools-list" class="loading"><div class="spinner"></div></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="benchmark" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-header"><h3 class="card-title">运行压测</h3></div>
+                    <div class="card-body">
+                        <div id="current-task" style="display:none;" class="alert alert-warning"></div>
+                        <div class="form-group">
+                            <label class="form-label">选择测试</label>
+                            <select class="form-select" id="benchmark-test">
+                                <option value="">-- 选择测试工具 --</option>
+                                <option value="fio">FIO - 磁盘IO测试</option>
+                                <option value="stream">STREAM - 内存带宽测试</option>
+                                <option value="unixbench">UnixBench - CPU综合测试</option>
+                            </select>
+                        </div>
+                        <div id="benchmark-params"></div>
+                        <button class="btn btn-primary" id="btn-run-benchmark" onclick="runBenchmark()">开始压测</button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">当前任务</h3>
+                        <button class="btn btn-outline btn-sm" onclick="refreshCurrentTask()">刷新</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="task-detail" class="empty-state"><p>暂无运行中的任务</p></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">任务历史</h3>
+                    <button class="btn btn-outline btn-sm" onclick="refreshTasks()">刷新</button>
+                </div>
+                <div class="card-body">
+                    <table>
+                        <thead><tr><th>任务ID</th><th>测试名称</th><th>状态</th><th>开始时间</th><th>结束时间</th><th>操作</th></tr></thead>
+                        <tbody id="tasks-table"><tr><td colspan="6" class="loading"><div class="spinner"></div></td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">测试结果</h3>
+                    <button class="btn btn-outline btn-sm" onclick="refreshResults()">刷新</button>
+                </div>
+                <div class="card-body">
+                    <table>
+                        <thead><tr><th>任务ID</th><th>测试名称</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+                        <tbody id="results-table"><tr><td colspan="5" class="loading"><div class="spinner"></div></td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div id="storage" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">存储使用情况</h3>
+                    <button class="btn btn-outline btn-sm" onclick="refreshStorage()">刷新</button>
+                </div>
+                <div class="card-body">
+                    <div id="storage-stats" class="loading"><div class="spinner"></div></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header"><h3 class="card-title">清理存储</h3></div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">清理日志文件</label>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="clean-logs" checked>
+                                <span>保留最近</span>
+                                <input type="number" class="form-input" id="keep-logs-days" value="7" style="width: 80px;">
+                                <span>天</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">清理工作目录</label>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="clean-working">
+                                <span>/tmp/benchmark_work</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-danger" onclick="cleanupStorage()">执行清理</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header"><h3 class="card-title">日志文件</h3></div>
+                <div class="card-body">
+                    <div id="logs-list" class="loading"><div class="spinner"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="result-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="card-title">详细信息</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body"><pre id="result-content"></pre></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let currentTaskId = null;
+        
+        async function api(method, path, data = null) {
+            const options = { method, headers: { 'Content-Type': 'application/json' } };
+            if (data) options.body = JSON.stringify(data);
+            const response = await fetch(`${API_BASE}${path}`, options);
+            return response.json();
+        }
+        
+        function formatDateTime(isoString) {
+            if (!isoString) return '-';
+            return new Date(isoString).toLocaleString('zh-CN');
+        }
+        
+        function getStatusBadge(status) {
+            const badges = {
+                'pending': '<span class="badge badge-info">等待中</span>',
+                'running': '<span class="badge badge-warning">运行中</span>',
+                'paused': '<span class="badge badge-warning">已暂停</span>',
+                'completed': '<span class="badge badge-success">已完成</span>',
+                'failed': '<span class="badge badge-danger">失败</span>',
+                'cancelled': '<span class="badge badge-danger">已取消</span>',
+                'installed': '<span class="badge badge-success">已安装</span>',
+                'not_installed': '<span class="badge badge-danger">未安装</span>',
+            };
+            return badges[status] || `<span class="badge badge-info">${status}</span>`;
+        }
+        
+        function syntaxHighlight(json) {
+            if (typeof json !== 'string') json = JSON.stringify(json, null, 2);
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) cls = /:$/.test(match) ? 'json-key' : 'json-string';
+                else if (/true|false/.test(match)) cls = 'json-boolean';
+                else if (/null/.test(match)) cls = 'json-null';
+                return '<span style="color:' + (cls === 'json-key' ? '#7dd3fc' : cls === 'json-string' ? '#86efac' : cls === 'json-boolean' ? '#f472b6' : cls === 'json-null' ? '#94a3b8' : '#fbbf24') + '">' + match + '</span>';
+            });
+        }
+        
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+        
+        async function refreshSystemStatus() {
+            try {
+                const res = await api('GET', '/api/system/status');
+                if (res.success) {
+                    const d = res.data;
+                    const getColor = (pct) => pct > 80 ? 'red' : pct > 60 ? 'yellow' : 'green';
+                    document.getElementById('system-stats').innerHTML = `
+                        <div class="stat-card"><div class="stat-label">CPU 使用率</div><div class="stat-value">${d.cpu.percent.toFixed(1)}<span class="stat-unit">%</span></div><div class="stat-bar"><div class="stat-bar-fill ${getColor(d.cpu.percent)}" style="width: ${d.cpu.percent}%"></div></div></div>
+                        <div class="stat-card"><div class="stat-label">内存使用</div><div class="stat-value">${d.memory.percent.toFixed(1)}<span class="stat-unit">%</span></div><div class="stat-bar"><div class="stat-bar-fill ${getColor(d.memory.percent)}" style="width: ${d.memory.percent}%"></div></div><div style="font-size: 12px; color: #6b7280; margin-top: 4px;">${d.memory.used_gb} / ${d.memory.total_gb} GB</div></div>
+                        <div class="stat-card"><div class="stat-label">磁盘使用</div><div class="stat-value">${d.disk.percent.toFixed(1)}<span class="stat-unit">%</span></div><div class="stat-bar"><div class="stat-bar-fill ${getColor(d.disk.percent)}" style="width: ${d.disk.percent}%"></div></div><div style="font-size: 12px; color: #6b7280; margin-top: 4px;">${d.disk.used_gb} / ${d.disk.total_gb} GB</div></div>
+                        <div class="stat-card"><div class="stat-label">系统负载</div><div class="stat-value">${d.load_average['1min'].toFixed(2)}</div><div style="font-size: 12px; color: #6b7280; margin-top: 4px;">1m: ${d.load_average['1min'].toFixed(2)} | 5m: ${d.load_average['5min'].toFixed(2)}</div></div>
+                    `;
+                }
+            } catch (e) { console.error('Failed to fetch system status:', e); }
+        }
+        
+        async function refreshSystemInfo() {
+            try {
+                const res = await api('GET', '/api/system/info');
+                if (res.success) {
+                    const d = res.data.system;
+                    const labels = res.data.labels || {};
+                    document.getElementById('system-info').innerHTML = `
+                        <div class="grid-3">
+                            <div><strong>主机名:</strong> ${d.hostname || '-'}</div>
+                            <div><strong>系统:</strong> ${d.os || '-'}</div>
+                            <div><strong>架构:</strong> ${d.arch || '-'}</div>
+                            <div><strong>CPU型号:</strong> ${d.cpu_model || '-'}</div>
+                            <div><strong>CPU核心:</strong> ${d.cpu_cores || '-'}</div>
+                            <div><strong>内存:</strong> ${d.memory_total ? (d.memory_total / 1024**3).toFixed(2) + ' GB' : '-'}</div>
+                            <div><strong>内核版本:</strong> ${d.kernel || '-'}</div>
+                            <div><strong>机器ID:</strong> ${d.machine_id || '-'}</div>
+                            <div><strong>标签:</strong> ${Object.entries(labels).map(([k,v]) => `${k}=${v}`).join(', ') || '-'}</div>
+                        </div>
+                    `;
+                }
+            } catch (e) { console.error('Failed to fetch system info:', e); }
+        }
+        
+        async function refreshMonitorStatus() {
+            try {
+                const res = await api('GET', '/api/monitor/status');
+                if (res.success) {
+                    const d = res.data;
+                    const statusEl = document.getElementById('monitor-status');
+                    if (d.running) {
+                        statusEl.className = 'alert alert-success';
+                        statusEl.textContent = `监控运行中 - 采集间隔: ${d.interval}秒`;
+                        document.getElementById('btn-start-monitor').style.display = 'none';
+                        document.getElementById('btn-stop-monitor').style.display = 'inline-flex';
+                    } else {
+                        statusEl.className = 'alert alert-info';
+                        statusEl.textContent = '监控未运行';
+                        document.getElementById('btn-start-monitor').style.display = 'inline-flex';
+                        document.getElementById('btn-stop-monitor').style.display = 'none';
+                    }
+                    document.getElementById('monitor-interval').value = d.interval || 5;
+                }
+            } catch (e) { console.error('Failed to fetch monitor status:', e); }
+        }
+        
+        async function startMonitor() {
+            const interval = document.getElementById('monitor-interval').value;
+            try {
+                const res = await api('POST', '/api/monitor/start', { interval: parseInt(interval) });
+                if (res.success) { alert('监控已启动'); refreshMonitorStatus(); }
+                else alert('启动失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        async function stopMonitor() {
+            try {
+                const res = await api('POST', '/api/monitor/stop');
+                if (res.success) { alert('监控已停止'); refreshMonitorStatus(); }
+                else alert('停止失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        async function refreshTools() {
+            try {
+                const res = await api('GET', '/api/tools');
+                if (res.success) {
+                    const tools = res.data.tools;
+                    let html = '';
+                    for (const [name, tool] of Object.entries(tools)) {
+                        html += `
+                            <div class="tool-card">
+                                <div class="tool-header">
+                                    <span class="tool-name">${tool.name || name}</span>
+                                    ${getStatusBadge(tool.status)}
+                                </div>
+                                <div class="tool-category">${tool.category || ''}</div>
+                                <div class="tool-info">${tool.description || ''}</div>
+                                ${tool.binary_path ? `<div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">路径: ${tool.binary_path}</div>` : ''}
+                                <div>${tool.status === 'not_installed' ? `<button class="btn btn-primary btn-sm" onclick="installTool('${name}')">安装</button>` : `<button class="btn btn-outline btn-sm" onclick="checkTool('${name}')">检查</button>`}</div>
+                            </div>
+                        `;
+                    }
+                    document.getElementById('tools-list').innerHTML = html || '<div class="empty-state">暂无工具</div>';
+                }
+            } catch (e) { console.error('Failed to fetch tools:', e); }
+        }
+        
+        async function installTool(name) {
+            if (!confirm(`确定要安装 ${name} 吗？`)) return;
+            try {
+                const res = await api('POST', `/api/tools/${name}/install`);
+                if (res.success) { alert(res.message || '安装成功'); refreshTools(); }
+                else alert('安装失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        async function checkTool(name) {
+            try {
+                const res = await api('GET', `/api/tools/${name}`);
+                if (res.success) alert(`工具状态: ${res.data.status}\n路径: ${res.data.binary_path || '-'}\n版本: ${res.data.version || '-'}`);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        const params = {
+            'fio': `<div class="form-row"><div class="form-group"><label class="form-label">测试类型</label><select class="form-select" id="param-rw"><option value="randread">随机读</option><option value="randwrite">随机写</option><option value="read">顺序读</option><option value="write">顺序写</option></select></div><div class="form-group"><label class="form-label">文件大小</label><input type="text" class="form-input" id="param-size" value="1G"></div></div><div class="form-row"><div class="form-group"><label class="form-label">块大小</label><input type="text" class="form-input" id="param-bs" value="4k"></div><div class="form-group"><label class="form-label">队列深度</label><input type="number" class="form-input" id="param-iodepth" value="32"></div></div>`,
+            'stream': `<div class="form-row"><div class="form-group"><label class="form-label">数组大小</label><input type="text" class="form-input" id="param-size" value="100M"></div><div class="form-group"><label class="form-label">运行次数</label><input type="number" class="form-input" id="param-ntimes" value="10"></div></div>`,
+            'unixbench': `<div class="form-group"><label class="form-label">测试项目</label><select class="form-select" id="param-test"><option value="all">全部测试</option><option value="dhry2reg">Dhrystone 2</option><option value="whetstone">Whetstone</option></select></div><div class="form-group"><label class="form-label">CPU核心数</label><input type="number" class="form-input" id="param-cores" value="1"></div></div>`
+        };
+        
+        document.getElementById('benchmark-test').addEventListener('change', function() {
+            document.getElementById('benchmark-params').innerHTML = params[this.value] || '';
+        });
+        
+        async function runBenchmark() {
+            const test = document.getElementById('benchmark-test').value;
+            if (!test) { alert('请选择测试'); return; }
+            const p = {};
+            document.querySelectorAll('#benchmark-params [id^="param-"]').forEach(el => {
+                const key = el.id.replace('param-', '');
+                p[key] = el.type === 'number' ? parseInt(el.value) : el.value;
+            });
+            try {
+                document.getElementById('btn-run-benchmark').disabled = true;
+                const res = await api('POST', '/api/benchmark/run', { test_name: test, params: p });
+                if (res.success) {
+                    currentTaskId = res.data.task_id;
+                    alert('压测任务已启动: ' + currentTaskId);
+                    refreshCurrentTask();
+                    refreshTasks();
+                } else alert('启动失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+            finally { document.getElementById('btn-run-benchmark').disabled = false; }
+        }
+        
+        async function refreshCurrentTask() {
+            try {
+                const res = await api('GET', '/api/benchmark/current');
+                if (res.success) {
+                    const task = res.data.current_task;
+                    const el = document.getElementById('task-detail');
+                    if (task) {
+                        currentTaskId = task.task_id;
+                        el.innerHTML = `
+                            <div class="tool-card">
+                                <div class="tool-header"><div><div style="font-family: monospace; font-size: 12px; color: #6b7280;">${task.task_id}</div><div style="font-weight: 600; margin-top: 4px;">${task.test_name}</div></div>${getStatusBadge(task.status)}</div>
+                                <div style="display: flex; gap: 16px; font-size: 13px; color: #6b7280; margin: 8px 0;"><span>开始: ${formatDateTime(task.start_time)}</span><span>进度: ${task.progress || 0}%</span></div>
+                                <div class="progress-bar"><div class="progress-fill" style="width: ${task.progress || 0}%"></div></div>
+                                <div style="margin-top: 12px;">
+                                    ${task.status === 'running' ? `<button class="btn btn-warning btn-sm" onclick="pauseTask('${task.task_id}')">暂停</button><button class="btn btn-danger btn-sm" onclick="cancelTask('${task.task_id}')">取消</button>` : ''}
+                                    ${task.status === 'paused' ? `<button class="btn btn-success btn-sm" onclick="resumeTask('${task.task_id}')">恢复</button><button class="btn btn-danger btn-sm" onclick="cancelTask('${task.task_id}')">取消</button>` : ''}
+                                    ${task.status === 'completed' ? `<button class="btn btn-primary btn-sm" onclick="showResult('${task.task_id}')">查看结果</button>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        currentTaskId = null;
+                        el.innerHTML = '<div class="empty-state"><p>暂无运行中的任务</p></div>';
+                    }
+                }
+            } catch (e) { console.error('Failed to fetch current task:', e); }
+        }
+        
+        async function pauseTask(taskId) {
+            try {
+                const res = await api('POST', '/api/benchmark/pause', { task_id: taskId });
+                if (res.success) { alert('任务已暂停'); refreshCurrentTask(); }
+                else alert('暂停失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        async function resumeTask(taskId) {
+            try {
+                const res = await api('POST', '/api/benchmark/resume', { task_id: taskId });
+                if (res.success) { alert('任务已恢复'); refreshCurrentTask(); }
+                else alert('恢复失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        async function cancelTask(taskId) {
+            if (!confirm('确定要取消此任务吗？')) return;
+            try {
+                const res = await api('POST', '/api/benchmark/cancel', { task_id: taskId });
+                if (res.success) { alert('任务已取消'); refreshCurrentTask(); refreshTasks(); }
+                else alert('取消失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        async function refreshTasks() {
+            try {
+                const res = await api('GET', '/api/benchmark/tasks');
+                if (res.success) {
+                    const tasks = res.data.tasks;
+                    if (tasks.length === 0) { document.getElementById('tasks-table').innerHTML = '<tr><td colspan="6" class="empty-state">暂无任务记录</td></tr>'; return; }
+                    let html = '';
+                    tasks.forEach(task => {
+                        html += `<tr><td><code>${task.task_id}</code></td><td>${task.test_name}</td><td>${getStatusBadge(task.status)}</td><td>${formatDateTime(task.start_time)}</td><td>${formatDateTime(task.end_time)}</td><td><button class="btn btn-outline btn-sm" onclick="showTaskStatus('${task.task_id}')">详情</button> ${task.status === 'completed' ? `<button class="btn btn-primary btn-sm" onclick="showResult('${task.task_id}')">结果</button>` : ''}</td></tr>`;
+                    });
+                    document.getElementById('tasks-table').innerHTML = html;
+                }
+            } catch (e) { console.error('Failed to fetch tasks:', e); }
+        }
+        
+        async function showTaskStatus(taskId) {
+            try {
+                const res = await api('GET', `/api/benchmark/tasks/${taskId}`);
+                if (res.success) showModal(res.data);
+                else alert('获取失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        async function refreshResults() {
+            try {
+                const res = await api('GET', '/api/benchmark/results');
+                if (res.success) {
+                    const results = res.data.results;
+                    if (results.length === 0) { document.getElementById('results-table').innerHTML = '<tr><td colspan="5" class="empty-state">暂无测试结果</td></tr>'; return; }
+                    let html = '';
+                    results.forEach(r => { html += `<tr><td><code>${r.task_id}</code></td><td>${r.test_name}</td><td>${getStatusBadge(r.status)}</td><td>${formatDateTime(r.created_at)}</td><td><button class="btn btn-primary btn-sm" onclick="showResult('${r.task_id}')">查看</button></td></tr>`; });
+                    document.getElementById('results-table').innerHTML = html;
+                }
+            } catch (e) { console.error('Failed to fetch results:', e); }
+        }
+        
+        async function showResult(taskId) {
+            try {
+                const res = await api('GET', `/api/benchmark/results/${taskId}`);
+                if (res.success) showModal(res.data);
+                else alert('获取失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        async function refreshStorage() {
+            try {
+                const res = await api('GET', '/api/storage/usage');
+                if (res.success) {
+                    const d = res.data;
+                    document.getElementById('storage-stats').innerHTML = `
+                        <div class="grid-3">
+                            ${d.database ? `<div class="stat-card"><div class="stat-label">数据库</div><div class="stat-value">${d.database.size_mb}<span class="stat-unit"> MB</span></div><div style="font-size: 12px; color: #6b7280; margin-top: 4px;">${d.database.result_count || 0} 条结果</div></div>` : ''}
+                            ${d.logs ? `<div class="stat-card"><div class="stat-label">日志文件</div><div class="stat-value">${d.logs.total_size_mb}<span class="stat-unit"> MB</span></div><div style="font-size: 12px; color: #6b7280; margin-top: 4px;">${d.logs.count} 个文件</div></div>` : ''}
+                            ${d.working_dir_files ? `<div class="stat-card"><div class="stat-label">工作目录</div><div class="stat-value">${d.working_dir_files.total_size_mb}<span class="stat-unit"> MB</span></div><div style="font-size: 12px; color: #6b7280; margin-top: 4px;">${d.working_dir_files.count} 个文件</div></div>` : ''}
+                        </div>
+                        <div style="margin-top: 16px; padding: 12px; background: var(--gray-50); border-radius: var(--radius);"><strong>总计:</strong> ${d.total_size_mb} MB</div>
+                    `;
+                }
+            } catch (e) { console.error('Failed to fetch storage:', e); }
+        }
+        
+        async function refreshLogs() {
+            try {
+                const res = await api('GET', '/api/storage/logs');
+                if (res.success) {
+                    const logs = res.data.logs;
+                    if (logs.length === 0) { document.getElementById('logs-list').innerHTML = '<div class="empty-state">暂无日志文件</div>'; return; }
+                    let html = '<table><thead><tr><th>文件名</th><th>大小</th><th>修改时间</th></tr></thead><tbody>';
+                    logs.forEach(log => { html += `<tr><td>${log.name}</td><td>${log.size_kb} KB</td><td>${formatDateTime(log.modified)}</td></tr>`; });
+                    html += '</tbody></table>';
+                    document.getElementById('logs-list').innerHTML = html;
+                }
+            } catch (e) { console.error('Failed to fetch logs:', e); }
+        }
+        
+        async function cleanupStorage() {
+            const data = { clean_logs: document.getElementById('clean-logs').checked, keep_logs_days: parseInt(document.getElementById('keep-logs-days').value), clean_working_dir: document.getElementById('clean-working').checked };
+            if (!confirm('确定要执行清理吗？')) return;
+            try {
+                const res = await api('POST', '/api/storage/cleanup', data);
+                if (res.success) { alert(`清理完成:\n日志删除: ${res.data.logs_deleted} 个\n工作目录删除: ${res.data.working_files_deleted} 个`); refreshStorage(); refreshLogs(); }
+                else alert('清理失败: ' + res.message);
+            } catch (e) { alert('请求失败: ' + e.message); }
+        }
+        
+        function showModal(data) {
+            document.getElementById('result-content').innerHTML = syntaxHighlight(data);
+            document.getElementById('result-modal').classList.add('active');
+        }
+        
+        function closeModal() { document.getElementById('result-modal').classList.remove('active'); }
+        document.getElementById('result-modal').addEventListener('click', (e) => { if (e.target.classList.contains('modal-overlay')) closeModal(); });
+        
+        async function init() {
+            try {
+                const res = await api('GET', '/health');
+                if (res.success) document.getElementById('agent-status').textContent = '运行中';
+            } catch (e) { document.getElementById('agent-status').textContent = '连接失败'; }
+            refreshSystemStatus();
+            refreshSystemInfo();
+            refreshMonitorStatus();
+            setInterval(refreshSystemStatus, 5000);
+        }
+        
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.dataset.tab;
+                if (tab === 'tools') refreshTools();
+                if (tab === 'benchmark') { refreshCurrentTask(); refreshTasks(); refreshResults(); }
+                if (tab === 'storage') { refreshStorage(); refreshLogs(); }
+            });
+        });
+        
+        init();
+    </script>
+</body>
+</html>
