@@ -3,6 +3,7 @@
 """
 import os
 import shutil
+from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request
 
@@ -393,3 +394,50 @@ def list_logs():
         "count": len(log_files),
         "total_count": len(list(log_dir.glob("*.log"))),
     })
+
+
+@bp.route('/api/storage/logs/<log_name>', methods=['GET'])
+def get_log_content(log_name: str):
+    """
+    读取日志文件内容
+    
+    GET /api/storage/logs/<log_name>?lines=500
+    """
+    import re
+    
+    # 安全检查：只允许 .log 文件，防止路径遍历攻击
+    if not log_name.endswith('.log') or '..' in log_name or '/' in log_name:
+        return error_response(ErrorCodes.INVALID_PARAMS, "Invalid log file name")
+    
+    data_dir = Path("/var/lib/node_agent")
+    log_file = data_dir / "logs" / log_name
+    
+    if not log_file.exists():
+        return error_response(ErrorCodes.NOT_FOUND, f"Log file '{log_name}' not found")
+    
+    # 读取最后 N 行（默认 500 行）
+    lines_limit = request.args.get('lines', 500, type=int)
+    
+    try:
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+        
+        # 按行分割，取最后 N 行
+        all_lines = content.split('\n')
+        total_lines = len(all_lines)
+        content_lines = all_lines[-lines_limit:] if lines_limit > 0 else all_lines
+        content = '\n'.join(content_lines)
+        
+        # 转义 HTML 特殊字符（防止 XSS）
+        import html
+        content = html.escape(content)
+        
+        return success({
+            "name": log_name,
+            "content": content,
+            "total_lines": total_lines,
+            "shown_lines": len(content_lines),
+            "size_kb": round(log_file.stat().st_size / 1024, 2),
+        })
+    except Exception as e:
+        return error_response(ErrorCodes.INTERNAL_ERROR, f"Failed to read log file: {str(e)}")

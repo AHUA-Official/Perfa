@@ -78,8 +78,16 @@ class ResultCollector:
         ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         path = self.log_dir / f"{ts}_{task.test_name}_{task.short_id}.log"
         with open(path, "w") as f:
-            f.write(f"Task ID: {task.task_id}\nTest: {task.test_name}\n")
-            f.write(f"Params: {json.dumps(task.params, indent=2)}\n{'='*40}\n\n")
+            f.write("="*60 + "\n")
+            f.write("Benchmark Task Log\n")
+            f.write("="*60 + "\n\n")
+            f.write(f"Task ID:     {task.task_id}\n")
+            f.write(f"Test Name:   {task.test_name}\n")
+            f.write(f"Start Time:  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"\nParameters:\n{json.dumps(task.params, indent=2)}\n")
+            f.write("\n" + "="*60 + "\n")
+            f.write("Execution Log\n")
+            f.write("="*60 + "\n\n")
         return path
 
     def append_log(self, log_path: Path, content: str):
@@ -108,10 +116,24 @@ class ResultCollector:
                         cpu = line.split(':')[1].strip()
                         break
         except: pass
+        
+        # 正确获取系统信息
+        os_info = "Unknown"
+        try:
+            # 读取 /etc/os-release 获取发行版信息
+            import configparser
+            with open('/etc/os-release') as f:
+                lines = f.readlines()
+                for line in lines:
+                    if line.startswith('PRETTY_NAME='):
+                        os_info = line.split('=')[1].strip().strip('"')
+                        break
+        except: pass
+        
         return {
             'hostname': platform.node(),
-            'os_info': f"{platform.system()} {platform.release()}",
-            'kernel_version': platform.version(),
+            'os_info': os_info,
+            'kernel_version': f"{platform.system()} {platform.release()}",  # Linux 5.15.0-xxx
             'cpu_model': cpu
         }
 

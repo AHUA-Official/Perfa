@@ -142,10 +142,16 @@ class NodeAgent:
         )
         
         # 注册运行器
-        from benchmark.runners import FioRunner, StreamRunner, UnixBenchRunner
+        from benchmark.runners import (
+            FioRunner, StreamRunner, UnixBenchRunner,
+            MlcRunner, SuperPiRunner, Hping3Runner
+        )
         self.benchmark_executor.register_runner(FioRunner())
         self.benchmark_executor.register_runner(StreamRunner())
         self.benchmark_executor.register_runner(UnixBenchRunner())
+        self.benchmark_executor.register_runner(MlcRunner())
+        self.benchmark_executor.register_runner(SuperPiRunner())
+        self.benchmark_executor.register_runner(Hping3Runner())
         
         logger.info("压测执行器已初始化")
     

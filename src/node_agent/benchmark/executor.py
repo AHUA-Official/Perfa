@@ -221,7 +221,7 @@ class BenchmarkExecutor:
             
             # 构建命令
             cmd = runner.build_command(task)
-            self._append_log(log_path, f"Command: {' '.join(cmd)}\n")
+            self._append_log(log_path, f"Command: {' '.join(cmd)}\n\n")
             
             # 获取超时时间
             timeout = runner.get_timeout(task.params)
@@ -252,7 +252,14 @@ class BenchmarkExecutor:
             task.end_time = datetime.now()
             
             output = ''.join(output_lines)
-            self._append_log(log_path, f"\n{'='*40}\nExit code: {returncode}\n")
+            self._append_log(log_path, f"\n{'='*60}\n")
+            self._append_log(log_path, f"Execution Finished\n")
+            self._append_log(log_path, f"{'='*60}\n")
+            self._append_log(log_path, f"End Time:    {task.end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            self._append_log(log_path, f"Duration:    {task.duration_seconds:.2f} seconds\n")
+            self._append_log(log_path, f"Exit Code:   {returncode}\n")
+            if returncode != 0:
+                self._append_log(log_path, f"Status:      FAILED\n")
             
             # ========== 采集结果 ==========
             self._update_status(task, TaskStatus.COLLECTING)
@@ -283,7 +290,10 @@ class BenchmarkExecutor:
             
             # 记录错误日志
             if log_path:
-                self._append_log(log_path, f"\n{'='*40}\nError: {e}\n")
+                self._append_log(log_path, f"\n{'='*60}\n")
+                self._append_log(log_path, f"ERROR\n")
+                self._append_log(log_path, f"{'='*60}\n")
+                self._append_log(log_path, f"Error: {e}\n")
             
             # 清理
             try:

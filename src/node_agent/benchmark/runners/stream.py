@@ -100,10 +100,7 @@ class StreamRunner(BaseRunner):
             "scale_rate_mbs": None,
             "add_rate_mbs": None,
             "triad_rate_mbs": None,
-            "array_size": task.params.get("array_size"),
-            "ntimes": task.params.get("ntimes"),
             "threads": task.params.get("nt", 1),
-            "raw_output": output[:5000]  # 保留部分原始输出
         }
         
         # 解析每个操作的带宽
