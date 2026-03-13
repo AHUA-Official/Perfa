@@ -53,3 +53,8 @@ Thumbs.db
 
 # 测试文件
 pi*.txt
+
+# MCP Server
+src/mcp_server/mcp.db
+src/mcp_server/*.bak
+src/mcp_server/examples/*.local.json

@@ -1,0 +1,6 @@
+mcp
+requests
+paramiko
+pydantic
+starlette
+uvicorn
