@@ -47,11 +47,44 @@ class MCPServer:
         self.register_tool(GetServerInfoTool(self.db))
         self.register_tool(UpdateServerInfoTool(self.db))
         
-        # TODO: 注册其他工具
-        # Agent 管理工具
-        # 工具管理工具
-        # Benchmark 管理工具
-        # 智能分析工具
+        # Agent 生命周期管理工具
+        from tools.agent_tools import (
+            DeployAgentTool, CheckAgentStatusTool, GetAgentLogsTool,
+            ConfigureAgentTool, UninstallAgentTool
+        )
+        
+        self.register_tool(DeployAgentTool(self.db))
+        self.register_tool(CheckAgentStatusTool(self.db))
+        self.register_tool(GetAgentLogsTool(self.db))
+        self.register_tool(ConfigureAgentTool(self.db))
+        self.register_tool(UninstallAgentTool(self.db))
+        
+        # 压测工具管理
+        from tools.tool_tools import (
+            InstallToolTool, UninstallToolTool, ListToolTool, VerifyToolTool
+        )
+        
+        self.register_tool(InstallToolTool(self.db))
+        self.register_tool(UninstallToolTool(self.db))
+        self.register_tool(ListToolTool(self.db))
+        self.register_tool(VerifyToolTool(self.db))
+        
+        # Benchmark 压测管理
+        from tools.benchmark_tools import (
+            RunBenchmarkTool, GetBenchmarkStatusTool, CancelBenchmarkTool,
+            GetBenchmarkResultTool, ListBenchmarkHistoryTool
+        )
+        
+        self.register_tool(RunBenchmarkTool(self.db))
+        self.register_tool(GetBenchmarkStatusTool(self.db))
+        self.register_tool(CancelBenchmarkTool(self.db))
+        self.register_tool(GetBenchmarkResultTool(self.db))
+        self.register_tool(ListBenchmarkHistoryTool(self.db))
+        
+        # 智能分析
+        from tools.report_tools import GenerateReportTool
+        
+        self.register_tool(GenerateReportTool(self.db))
     
     def list_tools(self) -> List[Dict[str, Any]]:
         """列出所有工具"""

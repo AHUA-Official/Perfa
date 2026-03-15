@@ -116,7 +116,7 @@ class AgentClient:
         """获取当前运行的任务"""
         try:
             data = self._request("GET", "/api/benchmark/current")
-            return data
+            return data.get("current_task")
         except:
             return None
     
