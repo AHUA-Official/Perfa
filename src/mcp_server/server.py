@@ -61,12 +61,12 @@ class MCPServer:
         
         # 压测工具管理
         from tools.tool_tools import (
-            InstallToolTool, UninstallToolTool, ListToolTool, VerifyToolTool
+            InstallToolTool, UninstallToolTool, ListToolsTool, VerifyToolTool
         )
         
         self.register_tool(InstallToolTool(self.db))
         self.register_tool(UninstallToolTool(self.db))
-        self.register_tool(ListToolTool(self.db))
+        self.register_tool(ListToolsTool(self.db))
         self.register_tool(VerifyToolTool(self.db))
         
         # Benchmark 压测管理

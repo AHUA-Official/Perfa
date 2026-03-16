@@ -59,4 +59,4 @@ if lsof -Pi :$MCP_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
 fi
 
 echo "启动 MCP Server..."
-python main.py
+python3 main.py
