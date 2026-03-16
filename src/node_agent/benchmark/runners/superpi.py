@@ -68,6 +68,7 @@ class SuperPiRunner(BaseRunner):
             "calculation_time_sec": None,
             "verification_time_sec": None,
             "total_time_sec": None,
+            "raw_output": output  # 添加原始输出
         }
         
         # 解析计算时间

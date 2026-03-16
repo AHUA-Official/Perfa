@@ -43,6 +43,9 @@ class AgentClient:
     def get_status(self) -> AgentStatus:
         """获取 Agent 状态"""
         data = self._request("GET", "/api/status")
+        # 兼容 Agent 不返回 status 字段的情况
+        if "status" not in data:
+            data["status"] = "online"
         return AgentStatus(**data)
     
     def get_system_info(self) -> SystemInfo:
@@ -53,7 +56,7 @@ class AgentClient:
     def get_system_status(self) -> SystemStatus:
         """获取系统状态（实时）"""
         data = self._request("GET", "/api/system/status")
-        return SystemStatus(**data)
+        return SystemStatus.from_agent_response(data)
     
     # Tool 管理
     

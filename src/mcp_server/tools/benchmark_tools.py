@@ -70,7 +70,7 @@ class RunBenchmarkTool(BaseTool):
                     },
                     "size": {
                         "type": "string",
-                        "description": "[fio] 测试文件大小，如 1G, 10G"
+                        "description": "[fio 必填] 测试文件大小，如 1G, 10G"
                     },
                     "iodepth": {
                         "type": "integer",
@@ -99,7 +99,7 @@ class RunBenchmarkTool(BaseTool):
                         "description": "[hping3] 发送次数"
                     },
                     "interval": {
-                        "type": "float",
+                        "type": "number",
                         "description": "[hping3] 发送间隔（秒）"
                     }
                 }
@@ -290,7 +290,7 @@ class GetBenchmarkResultTool(BaseTool):
         self.db = db
     
     def execute(self, server_id: str, task_id: str, **kwargs) -> Dict[str, Any]:
-        """调用 Agent /api/benchmark/results/<task_id> API"""
+        """调用 Agent /api/benchmark/results/<task_id> API 并获取完整日志"""
         server = self.db.get_server(server_id)
         if not server:
             return {"success": False, "error": f"服务器 {server_id} 不存在"}
@@ -306,7 +306,7 @@ class GetBenchmarkResultTool(BaseTool):
             
             result = client.get_benchmark_result(task_id)
             
-            return {
+            response = {
                 "success": True,
                 "task_id": result.task_id,
                 "test_name": result.test_name,
@@ -316,6 +316,20 @@ class GetBenchmarkResultTool(BaseTool):
                 "log_file": result.log_file,
                 "error": result.error
             }
+            
+            # 如果有日志文件，获取完整日志内容
+            if result.log_file:
+                try:
+                    import os
+                    # log_file 可能是完整路径或文件名
+                    log_name = os.path.basename(result.log_file)
+                    log_content = client._request("GET", f"/api/storage/logs/{log_name}", params={"lines": 5000})
+                    response["log_content"] = log_content.get("content", "")
+                    response["log_total_lines"] = log_content.get("total_lines", 0)
+                except Exception as e:
+                    response["log_content_error"] = f"获取日志内容失败: {str(e)}"
+            
+            return response
             
         except Exception as e:
             return {"success": False, "error": f"获取结果失败: {str(e)}"}

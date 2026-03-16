@@ -85,25 +85,36 @@ class DeployAgentTool(BaseTool):
     
     def _rsync_project(self, server, install_dir: str) -> tuple:
         """通过 rsync 传输必要的项目文件"""
-        # 只传输必要的目录和文件
+        import shutil
+        
+        # 构建 SSH 命令
+        if server.ssh_key_path:
+            ssh_cmd = f"ssh -i {server.ssh_key_path} -p {server.port} -o StrictHostKeyChecking=no"
+        elif server.ssh_password_encrypted:
+            # 使用 sshpass 支持密码认证
+            if not shutil.which("sshpass"):
+                return False, "缺少 sshpass 工具，请安装: apt install sshpass -y"
+            ssh_cmd = f"sshpass -p '{server.ssh_password_encrypted}' ssh -p {server.port} -o StrictHostKeyChecking=no"
+        else:
+            ssh_cmd = f"ssh -p {server.port} -o StrictHostKeyChecking=no"
+        
+        # 传输整个项目，排除不必要的文件
         rsync_cmd = [
-            "rsync", "-avz", "--delete",
-            "--exclude=*.pyc", "--exclude=__pycache__",
-            "--exclude=venv", "--exclude=*.log",
-            "--exclude=.git", "--exclude=data/vm-storage",
+            "rsync", "-avz",
+            "--exclude=*.pyc",
+            "--exclude=__pycache__",
+            "--exclude=venv",
+            "--exclude=*.log",
+            "--exclude=.git",
+            "--exclude=data/vm-storage",
             "--exclude=benchmark/work",
-            f"-e", f"ssh -p {server.port} -o StrictHostKeyChecking=no",
-            # 传输必要的目录
-            "--include=deploy/***",
-            "--include=src/node_agent/***",
-            "--include=src/mcp_server/requirements.txt",
-            "--exclude=*",
+            "--exclude=*.db",
+            "--exclude=.idea",
+            "--exclude=.vscode",
+            f"-e", ssh_cmd,
             f"{LOCAL_PERFA_DIR}/",
             f"{server.ssh_user}@{server.ip}:{install_dir}/"
         ]
-        
-        if server.ssh_key_path:
-            rsync_cmd[-4] = f"ssh -i {server.ssh_key_path} -p {server.port} -o StrictHostKeyChecking=no"
         
         result = subprocess.run(rsync_cmd, capture_output=True, text=True, timeout=300)
         return result.returncode == 0, result.stderr

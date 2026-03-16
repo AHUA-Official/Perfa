@@ -30,8 +30,15 @@ echo ""
 # 2. 停止 Grafana
 echo "[2/3] 停止 Grafana..."
 if sudo docker ps | grep -q grafana; then
-    sudo docker stop grafana > /dev/null 2>&1
-    sudo docker rm grafana > /dev/null 2>&1
+    # 兼容新旧版本 Docker Compose
+    if sudo docker compose version &>/dev/null; then
+        sudo docker compose down 2>/dev/null || true
+    elif sudo docker-compose version &>/dev/null; then
+        sudo docker-compose down 2>/dev/null || true
+    else
+        sudo docker stop grafana 2>/dev/null || true
+        sudo docker rm grafana 2>/dev/null || true
+    fi
     echo "      ✅ Grafana 已停止"
 else
     echo "      Grafana 未运行"

@@ -66,18 +66,18 @@ class GenerateReportTool(BaseTool):
         if not server:
             return {"error": f"Server {server_id} not found"}
         
-        agent_id = server.get("agent_id")
+        agent_id = server.agent_id
         if not agent_id:
             return {"error": "Agent not deployed on this server"}
         
         # 2. 创建 Agent 客户端
-        agent_url = f"http://{server['ip']}:8080"
+        agent_port = server.agent_port or 8080
+        agent_url = f"http://{server.ip}:{agent_port}"
         agent_client = AgentClient(agent_url)
         
         # 3. 检查 Agent 状态
         try:
-            health = agent_client.check_health()
-            if health.get("status") != "healthy":
+            if not agent_client.health_check():
                 return {"error": "Agent is not healthy"}
         except Exception as e:
             return {"error": f"Agent unreachable: {str(e)}"}
@@ -102,42 +102,31 @@ class GenerateReportTool(BaseTool):
             results = agent_client.list_benchmark_results(limit=1)
             if not results:
                 return {"error": "No benchmark results found"}
-            task_id = results[0].get("task_id")
+            task_id = results[0].get("task_id") if isinstance(results[0], dict) else results[0].task_id
         
         # 获取测试结果
         result = agent_client.get_benchmark_result(task_id)
         if not result:
             return {"error": f"Task {task_id} not found"}
         
-        test_name = result.get("test_name", "unknown")
+        test_name = result.test_name
         
         # 构建报告
         report = {
             "report_type": "single",
             "task_id": task_id,
             "test_name": test_name,
-            "status": result.get("status"),
-            "start_time": result.get("start_time"),
-            "end_time": result.get("end_time"),
-            "duration_seconds": result.get("duration_seconds"),
-            "server_info": result.get("system_info", {}),
-            "results": result.get("results", {}),
+            "status": result.status,
+            "duration_seconds": result.duration_seconds,
+            "server_info": {},  # system_info 需要单独获取
+            "results": result.metrics or {},
             "summary": self._generate_summary(test_name, result),
             "analysis": self._analyze_result(test_name, result),
         }
         
-        # 添加监控数据
-        if include_metrics:
-            metrics = self._fetch_vm_metrics(
-                agent_id,
-                result.get("start_time"),
-                result.get("end_time")
-            )
-            report["metrics"] = metrics
-        
         # 添加日志路径
-        if result.get("log_path"):
-            report["log_path"] = result["log_path"]
+        if result.log_file:
+            report["log_path"] = result.log_file
         
         return report
     
@@ -147,10 +136,10 @@ class GenerateReportTool(BaseTool):
         
         if not task_ids or len(task_ids) < 2:
             # 获取最近两次测试
-            results = agent_client.list_benchmark_results(limit=2)
-            if len(results) < 2:
+            results_list = agent_client.list_benchmark_results(limit=2)
+            if len(results_list) < 2:
                 return {"error": "Need at least 2 benchmark results for comparison"}
-            task_ids = [r.get("task_id") for r in results]
+            task_ids = [r.get("task_id") if isinstance(r, dict) else r.task_id for r in results_list]
         
         # 获取所有测试结果
         results = []
@@ -173,18 +162,18 @@ class GenerateReportTool(BaseTool):
         baseline = results[0]
         for i, result in enumerate(results):
             entry = {
-                "task_id": result.get("task_id"),
-                "test_name": result.get("test_name"),
-                "start_time": result.get("start_time"),
-                "results": result.get("results", {}),
-                "summary": self._generate_summary(result.get("test_name"), result)
+                "task_id": result.task_id,
+                "test_name": result.test_name,
+                "duration_seconds": result.duration_seconds,
+                "results": result.metrics or {},
+                "summary": self._generate_summary(result.test_name, result)
             }
             
             # 计算与基准的差异
             if i > 0:
                 entry["diff_from_baseline"] = self._calculate_diff(
-                    baseline.get("results", {}),
-                    result.get("results", {})
+                    baseline.metrics or {},
+                    result.metrics or {}
                 )
             
             report["comparison"].append(entry)
@@ -216,9 +205,9 @@ class GenerateReportTool(BaseTool):
         
         return diagnosis
     
-    def _generate_summary(self, test_name: str, result: Dict) -> Dict[str, Any]:
+    def _generate_summary(self, test_name: str, result) -> Dict[str, Any]:
         """生成结果摘要"""
-        results = result.get("results", {})
+        results = result.metrics or {}
         summary = {}
         
         if test_name == "unixbench":
@@ -263,9 +252,9 @@ class GenerateReportTool(BaseTool):
         
         return summary
     
-    def _analyze_result(self, test_name: str, result: Dict) -> Dict[str, Any]:
+    def _analyze_result(self, test_name: str, result) -> Dict[str, Any]:
         """分析测试结果"""
-        results = result.get("results", {})
+        results = result.metrics or {}
         analysis = {
             "performance_level": "unknown",
             "bottlenecks": [],
@@ -362,7 +351,7 @@ class GenerateReportTool(BaseTool):
         
         return diff
     
-    def _compare_results(self, results: List[Dict]) -> Dict[str, Any]:
+    def _compare_results(self, results: List) -> Dict[str, Any]:
         """对比多个结果"""
         analysis = {
             "trend": "stable",
@@ -374,8 +363,8 @@ class GenerateReportTool(BaseTool):
         # 简单的趋势分析
         scores = []
         for r in results:
-            test_name = r.get("test_name")
-            res = r.get("results", {})
+            test_name = r.test_name
+            res = r.metrics or {}
             
             if test_name == "unixbench":
                 scores.append(res.get("multi_core_score", 0))
@@ -392,8 +381,8 @@ class GenerateReportTool(BaseTool):
             
             best_idx = scores.index(max(scores))
             worst_idx = scores.index(min(scores))
-            analysis["best_performer"] = results[best_idx].get("task_id")
-            analysis["worst_performer"] = results[worst_idx].get("task_id")
+            analysis["best_performer"] = results[best_idx].task_id
+            analysis["worst_performer"] = results[worst_idx].task_id
         
         return analysis
     

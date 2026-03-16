@@ -134,9 +134,24 @@ class BaseTool(ABC):
         """
         return shutil.which(cmd) is not None
     
-    def _apt_install(self, package: str) -> bool:
+    def _get_package_manager(self) -> str:
         """
-        使用apt安装包
+        检测系统包管理器
+        
+        Returns:
+            'apt', 'yum', 'dnf' 或 None
+        """
+        if shutil.which("apt-get"):
+            return "apt"
+        elif shutil.which("dnf"):
+            return "dnf"
+        elif shutil.which("yum"):
+            return "yum"
+        return None
+
+    def _install_package(self, package: str) -> bool:
+        """
+        使用系统包管理器安装包
         
         Args:
             package: 包名
@@ -144,10 +159,25 @@ class BaseTool(ABC):
         Returns:
             安装是否成功
         """
-        logger.info(f"Installing {package} via apt...")
-        returncode, stdout, stderr = self._run_command(
-            ["sudo", "apt-get", "install", "-y", package]
-        )
+        pm = self._get_package_manager()
+        if not pm:
+            logger.error("No supported package manager found (apt/yum/dnf)")
+            return False
+        
+        logger.info(f"Installing {package} via {pm}...")
+        
+        if pm == "apt":
+            returncode, stdout, stderr = self._run_command(
+                ["sudo", "apt-get", "install", "-y", package]
+            )
+        elif pm == "dnf":
+            returncode, stdout, stderr = self._run_command(
+                ["sudo", "dnf", "install", "-y", package]
+            )
+        else:  # yum
+            returncode, stdout, stderr = self._run_command(
+                ["sudo", "yum", "install", "-y", package]
+            )
         
         if returncode == 0:
             logger.info(f"Successfully installed {package}")
@@ -155,10 +185,10 @@ class BaseTool(ABC):
         else:
             logger.error(f"Failed to install {package}: {stderr}")
             return False
-    
-    def _apt_remove(self, package: str) -> bool:
+
+    def _remove_package(self, package: str) -> bool:
         """
-        使用apt卸载包
+        使用系统包管理器卸载包
         
         Args:
             package: 包名
@@ -166,10 +196,25 @@ class BaseTool(ABC):
         Returns:
             卸载是否成功
         """
-        logger.info(f"Removing {package} via apt...")
-        returncode, stdout, stderr = self._run_command(
-            ["sudo", "apt-get", "remove", "-y", package]
-        )
+        pm = self._get_package_manager()
+        if not pm:
+            logger.error("No supported package manager found (apt/yum/dnf)")
+            return False
+        
+        logger.info(f"Removing {package} via {pm}...")
+        
+        if pm == "apt":
+            returncode, stdout, stderr = self._run_command(
+                ["sudo", "apt-get", "remove", "-y", package]
+            )
+        elif pm == "dnf":
+            returncode, stdout, stderr = self._run_command(
+                ["sudo", "dnf", "remove", "-y", package]
+            )
+        else:  # yum
+            returncode, stdout, stderr = self._run_command(
+                ["sudo", "yum", "remove", "-y", package]
+            )
         
         if returncode == 0:
             logger.info(f"Successfully removed {package}")
@@ -177,6 +222,14 @@ class BaseTool(ABC):
         else:
             logger.error(f"Failed to remove {package}: {stderr}")
             return False
+
+    def _apt_install(self, package: str) -> bool:
+        """使用apt安装包（兼容旧代码）"""
+        return self._install_package(package)
+
+    def _apt_remove(self, package: str) -> bool:
+        """使用apt卸载包（兼容旧代码）"""
+        return self._remove_package(package)
     
     def _make_executable(self, file_path: Path):
         """

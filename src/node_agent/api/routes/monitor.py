@@ -396,6 +396,72 @@ def list_logs():
     })
 
 
+@bp.route('/api/config', methods=['GET', 'POST'])
+def agent_config():
+    """
+    获取或更新 Agent 配置
+    
+    GET /api/config - 获取当前配置
+    POST /api/config - 更新配置
+    Body: {"collect_interval_sec": 10, "max_concurrent_tasks": 2}
+    """
+    from flask import current_app
+    agent = current_app.config.get('agent')
+    
+    if request.method == 'GET':
+        # 返回当前配置
+        config = {
+            "collect_interval_sec": 5,
+            "max_concurrent_tasks": 1,
+        }
+        
+        # 从 monitor 获取实际配置
+        if agent and agent.monitor:
+            config["collect_interval_sec"] = agent.monitor.interval
+            config["monitor_running"] = agent.monitor.is_running()
+            config["enabled_metrics"] = agent.monitor.enabled_metrics
+        
+        # 从 benchmark executor 获取并发配置
+        if agent and hasattr(agent, 'benchmark_executor') and agent.benchmark_executor:
+            config["max_concurrent_tasks"] = getattr(
+                agent.benchmark_executor, 'max_concurrent_tasks', 1
+            )
+        
+        return success(config)
+    
+    # POST - 更新配置
+    data = request.get_json() or {}
+    
+    updated = {}
+    
+    # 更新监控间隔
+    if 'collect_interval_sec' in data:
+        interval = data['collect_interval_sec']
+        if agent and agent.monitor:
+            agent.monitor.interval = interval
+            updated["collect_interval_sec"] = interval
+    
+    # 更新并发任务数（如果支持）
+    if 'max_concurrent_tasks' in data:
+        max_tasks = data['max_concurrent_tasks']
+        if agent and hasattr(agent, 'benchmark_executor') and agent.benchmark_executor:
+            if hasattr(agent.benchmark_executor, 'max_concurrent_tasks'):
+                agent.benchmark_executor.max_concurrent_tasks = max_tasks
+                updated["max_concurrent_tasks"] = max_tasks
+    
+    # 更新启用的监控指标
+    if 'enabled_metrics' in data:
+        enabled_metrics = data['enabled_metrics']
+        if agent and agent.monitor:
+            agent.monitor.enabled_metrics = enabled_metrics
+            updated["enabled_metrics"] = enabled_metrics
+    
+    if not updated:
+        return error_response(ErrorCodes.INVALID_PARAMS, "No valid config parameters provided")
+    
+    return success(updated, "配置已更新")
+
+
 @bp.route('/api/storage/logs/<log_name>', methods=['GET'])
 def get_log_content(log_name: str):
     """

@@ -4,7 +4,9 @@
 
 set -e
 
-PROJECT_DIR="/home/ubuntu/Perfa"
+# 自动检测脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VM_DIR="$PROJECT_DIR/deploy/vm"
 GRAFANA_DIR="$PROJECT_DIR/deploy/grafana"
 AGENT_DIR="$PROJECT_DIR/src/node_agent"
@@ -19,13 +21,15 @@ echo "[1/3] 启动 Victoria Metrics..."
 if sudo docker ps | grep -q victoria-metrics; then
     echo "      Victoria Metrics 已在运行"
 else
+    # 清理可能存在的旧容器
+    sudo docker rm -f victoria-metrics 2>/dev/null || true
+    
     sudo docker run -d --name victoria-metrics \
         -p 8428:8428 \
         -v $VM_DIR:/config \
         -v $PROJECT_DIR/data/vm-storage:/victoria-metrics-data \
         victoriametrics/victoria-metrics:latest \
-        -promscrape.config=/config/vm_scrape.yml \
-        > /dev/null 2>&1
+        -promscrape.config=/config/vm_scrape.yml
     
     sleep 2
     if sudo docker ps | grep -q victoria-metrics; then
@@ -42,8 +46,19 @@ echo "[2/3] 启动 Grafana..."
 if sudo docker ps | grep -q grafana; then
     echo "      Grafana 已在运行"
 else
+    # 清理可能存在的旧容器
     cd $GRAFANA_DIR
-    sudo docker compose up -d > /dev/null 2>&1
+    sudo docker compose down 2>/dev/null || sudo docker-compose down 2>/dev/null || true
+    
+    # 兼容新旧版本 Docker Compose
+    if sudo docker compose version &>/dev/null; then
+        sudo docker compose up -d
+    elif sudo docker-compose version &>/dev/null; then
+        sudo docker-compose up -d
+    else
+        echo "      ❌ Docker Compose 未安装"
+        exit 1
+    fi
     
     sleep 3
     if sudo docker ps | grep -q grafana; then
