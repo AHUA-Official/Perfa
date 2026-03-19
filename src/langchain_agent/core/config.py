@@ -72,10 +72,15 @@ class MCPConfig:
     
     @property
     def sse_url(self) -> str:
-        """获取完整的SSE URL"""
+        """获取完整的SSE URL（包含API key）"""
         base_url = self.server_url.rstrip("/")
         endpoint = self.sse_endpoint if self.sse_endpoint.startswith("/") else f"/{self.sse_endpoint}"
-        return f"{base_url}{endpoint}"
+        
+        # 如果有 API key，添加到 URL 中
+        if self.api_key:
+            return f"{base_url}{endpoint}?api_key={self.api_key}"
+        else:
+            return f"{base_url}{endpoint}"
     
     def __post_init__(self):
         logger.info(f"MCP配置初始化完成，Server地址: {self.server_url}")
