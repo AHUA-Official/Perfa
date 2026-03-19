@@ -1,11 +1,15 @@
 """服务器管理工具"""
 import uuid
+import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 import paramiko
 from .base import BaseTool
 from storage import Database, Server
 from agent_client import AgentClient
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class RegisterServerTool(BaseTool):
@@ -59,16 +63,54 @@ class RegisterServerTool(BaseTool):
                 alias: str = "", tags: list = None, **kwargs) -> Dict[str, Any]:
         """执行注册"""
         # 1. 测试 SSH 连接
+        logger.info(f"[注册服务器] 开始测试SSH连接: {ip}:{port} (用户: {ssh_user})")
         try:
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
             if ssh_key_path:
-                client.connect(ip, port=port, username=ssh_user, key_filename=ssh_key_path, timeout=10)
+                logger.info(f"[注册服务器] 使用密钥认证: {ssh_key_path}")
+                client.connect(
+                    ip, 
+                    port=port, 
+                    username=ssh_user, 
+                    key_filename=ssh_key_path, 
+                    timeout=10,
+                    banner_timeout=10
+                )
             else:
-                client.connect(ip, port=port, username=ssh_user, password=ssh_password, timeout=10)
+                logger.info(f"[注册服务器] 使用密码认证（禁用公钥和agent）")
+                client.connect(
+                    ip, 
+                    port=port, 
+                    username=ssh_user, 
+                    password=ssh_password, 
+                    timeout=10,
+                    banner_timeout=10,
+                    allow_agent=False,      # 禁用SSH agent
+                    look_for_keys=False     # 禁用自动查找密钥文件
+                )
+            logger.info(f"[注册服务器] SSH连接测试成功: {ip}:{port}")
             client.close()
+        except paramiko.AuthenticationException as e:
+            logger.error(f"[注册服务器] 认证失败 - {ip}:{port}: {str(e)}")
+            logger.error(f"[注册服务器] 认证方式: {'密钥' if ssh_key_path else '密码'}")
+            logger.error(f"[注册服务器] 用户名: {ssh_user}")
+            if not ssh_key_path:
+                logger.error(f"[注册服务器] 密码长度: {len(ssh_password) if ssh_password else 0}")
+            return {
+                "success": False,
+                "error": f"SSH 认证失败: {str(e)}"
+            }
+        except paramiko.SSHException as e:
+            logger.error(f"[注册服务器] SSH协议错误 - {ip}:{port}: {str(e)}")
+            return {
+                "success": False,
+                "error": f"SSH 协议错误: {str(e)}"
+            }
         except Exception as e:
+            logger.error(f"[注册服务器] SSH连接失败 - {ip}:{port}: {type(e).__name__}: {str(e)}")
+            logger.error(f"[注册服务器] 异常详情", exc_info=True)
             return {
                 "success": False,
                 "error": f"SSH 连接失败: {str(e)}"

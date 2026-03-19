@@ -7,7 +7,10 @@
 mvps/mvp1/venv/
 # 根目录的虚拟环境
 venv/
+
+# 环境变量文件（所有目录）
 .env
+**/.env
 
 # Python 缓存
 __pycache__/
@@ -56,5 +59,11 @@ pi*.txt
 
 # MCP Server
 src/mcp_server/mcp.db
+src/mcp_server/venv/
 src/mcp_server/*.bak
 src/mcp_server/examples/*.local.json
+
+# LangChain Agent
+src/langchain_agent/__pycache__/
+src/langchain_agent/**/__pycache__/
+logs/

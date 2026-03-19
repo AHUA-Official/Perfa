@@ -31,14 +31,15 @@ class UnixBenchRunner(BaseRunner):
         if status.get("status") != "installed":
             return False
         
-        # UnixBench 需要运行目录
+        # UnixBench wrapper 脚本路径
         self.binary_path = tool.binary_path
-        self.run_dir = tool.binary_path  # Run 脚本所在目录
         return True
 
     def build_command(self, task: BenchmarkTask) -> List[str]:
         """
         构建执行命令
+        
+        使用 wrapper 脚本执行，wrapper 会自动 cd 到正确目录
         
         参数：
         - copies: 并行拷贝数，None 表示自动
@@ -46,7 +47,8 @@ class UnixBenchRunner(BaseRunner):
         """
         params = task.params or {}
         
-        cmd = ["./Run"]
+        # 使用 wrapper 脚本（绝对路径）
+        cmd = [self.binary_path]
         
         copies = params.get("copies")
         if copies:

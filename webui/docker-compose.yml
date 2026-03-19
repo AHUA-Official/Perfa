@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  chatgpt-web:
+    image: yidadaa/chatgpt-next-web:latest
+    container_name: perfa-chatgpt-web
+    ports:
+      - "3001:3000"  # 使用 3001 避免与 Grafana 冲突
+    environment:
+      # API 配置
+      - OPENAI_API_KEY=any-key
+      - BASE_URL=http://host.docker.internal:10000
+      
+      # 可选配置
+      - CODE=                    # 访问密码（可选）
+      - HIDE_USER_API_KEY=1      # 隐藏 API Key 输入
+      - DISABLE_GPT4=1           # 禁用 GPT-4（节省费用）
+      - ENABLE_BALANCE_QUERY=0   # 禁用余额查询
+      
+    restart: unless-stopped
+    
+    # Linux 需要额外配置才能访问宿主机
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

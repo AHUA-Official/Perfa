@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: perfa-chromadb
+    ports:
+      - "8001:8000"  # 宿主机8001端口映射到容器8000端口
+    volumes:
+      - chroma_data:/chroma/chroma_data
+    environment:
+      - CHROMA_DB_IMPL=duckdb+parquet
+      - PERSIST_DIRECTORY=/chroma/chroma_data
+      - ANONYMIZED_TELEMETRY=False
+    restart: unless-stopped
+    networks:
+      - perfa-network
+
+volumes:
+  chroma_data:
+    driver: local
+
+networks:
+  perfa-network:
+    driver: bridge

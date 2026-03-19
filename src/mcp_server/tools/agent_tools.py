@@ -1,6 +1,7 @@
 """Agent 生命周期管理工具"""
 import uuid
 import time
+import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 import subprocess
@@ -8,6 +9,9 @@ import paramiko
 from .base import BaseTool
 from storage import Database
 from agent_client import AgentClient
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 # 本地 Perfa 项目路径
 LOCAL_PERFA_DIR = "/home/ubuntu/Perfa"
@@ -41,16 +45,52 @@ class DeployAgentTool(BaseTool):
     
     def _ssh_connect(self, server) -> paramiko.SSHClient:
         """建立 SSH 连接"""
+        logger.info(f"[SSH] 开始连接服务器: {server.ip}:{server.port} (用户: {server.ssh_user})")
+        
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
-        if server.ssh_key_path:
-            client.connect(server.ip, port=server.port,
-                         username=server.ssh_user, key_filename=server.ssh_key_path, timeout=30)
-        else:
-            client.connect(server.ip, port=server.port,
-                         username=server.ssh_user, password=server.ssh_password_encrypted, timeout=30)
-        return client
+        try:
+            if server.ssh_key_path:
+                logger.info(f"[SSH] 使用密钥认证: {server.ssh_key_path}")
+                client.connect(
+                    server.ip, 
+                    port=server.port,
+                    username=server.ssh_user, 
+                    key_filename=server.ssh_key_path, 
+                    timeout=30,
+                    banner_timeout=30
+                )
+            else:
+                logger.info(f"[SSH] 使用密码认证（禁用公钥和agent）")
+                client.connect(
+                    server.ip, 
+                    port=server.port,
+                    username=server.ssh_user, 
+                    password=server.ssh_password_encrypted, 
+                    timeout=30,
+                    banner_timeout=30,
+                    allow_agent=False,      # 禁用SSH agent
+                    look_for_keys=False     # 禁用自动查找密钥文件
+                )
+            
+            logger.info(f"[SSH] 连接成功: {server.ip}:{server.port}")
+            return client
+            
+        except paramiko.AuthenticationException as e:
+            logger.error(f"[SSH] 认证失败 - {server.ip}:{server.port}: {str(e)}")
+            logger.error(f"[SSH] 认证方式: {'密钥' if server.ssh_key_path else '密码'}")
+            logger.error(f"[SSH] 用户名: {server.ssh_user}")
+            if not server.ssh_key_path:
+                logger.error(f"[SSH] 密码长度: {len(server.ssh_password_encrypted) if server.ssh_password_encrypted else 0}")
+            raise
+        except paramiko.SSHException as e:
+            logger.error(f"[SSH] SSH协议错误 - {server.ip}:{server.port}: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"[SSH] 连接异常 - {server.ip}:{server.port}: {type(e).__name__}: {str(e)}")
+            logger.error(f"[SSH] 异常详情", exc_info=True)
+            raise
     
     def _check_runtime(self, client: paramiko.SSHClient) -> Dict[str, Any]:
         """检查目标服务器运行时环境"""
@@ -121,11 +161,15 @@ class DeployAgentTool(BaseTool):
     
     def execute(self, server_id: str, install_dir: str = DEFAULT_INSTALL_DIR, **kwargs) -> Dict[str, Any]:
         """部署监控栈"""
+        logger.info(f"[部署Agent] 开始部署 - 服务器ID: {server_id}, 安装目录: {install_dir}")
+        
         server = self.db.get_server(server_id)
         if not server:
+            logger.error(f"[部署Agent] 服务器不存在: {server_id}")
             return {"success": False, "error": f"服务器 {server_id} 不存在"}
         
         if server.agent_id:
+            logger.warning(f"[部署Agent] 服务器已部署: {server_id}, agent_id: {server.agent_id}")
             return {
                 "success": False,
                 "error": f"服务器已部署 (agent_id: {server.agent_id})",
@@ -133,31 +177,41 @@ class DeployAgentTool(BaseTool):
             }
         
         agent_id = str(uuid.uuid4())
+        logger.info(f"[部署Agent] 生成Agent ID: {agent_id}")
         
         try:
             # 1. 建立 SSH 连接
+            logger.info(f"[部署Agent] 步骤1: 建立SSH连接")
             client = self._ssh_connect(server)
             
             # 2. 检查运行时环境
+            logger.info(f"[部署Agent] 步骤2: 检查运行时环境")
             runtime = self._check_runtime(client)
             if runtime["errors"]:
+                logger.error(f"[部署Agent] 环境检查失败: {', '.join(runtime['errors'])}")
                 client.close()
                 return {
                     "success": False,
                     "error": "环境检查失败: " + ", ".join(runtime["errors"]),
                     "runtime": runtime["checks"]
                 }
+            logger.info(f"[部署Agent] 环境检查通过: {runtime['checks']}")
             
             # 3. 创建安装目录
+            logger.info(f"[部署Agent] 步骤3: 创建安装目录 {install_dir}")
             client.exec_command(f"mkdir -p {install_dir}")[1].channel.recv_exit_status()
             client.close()
             
             # 4. rsync 传输项目
+            logger.info(f"[部署Agent] 步骤4: 使用rsync传输项目文件")
             success, error = self._rsync_project(server, install_dir)
             if not success:
+                logger.error(f"[部署Agent] 代码传输失败: {error}")
                 return {"success": False, "error": f"代码传输失败: {error}"}
+            logger.info(f"[部署Agent] 代码传输成功")
             
             # 5. 安装 Python 依赖
+            logger.info(f"[部署Agent] 步骤5: 安装Python依赖")
             client = self._ssh_connect(server)
             client.exec_command(
                 f"cd {install_dir}/src/node_agent && "
@@ -166,6 +220,7 @@ class DeployAgentTool(BaseTool):
             )[1].channel.recv_exit_status()
             
             # 6. 调用 start-all.sh
+            logger.info(f"[部署Agent] 步骤6: 调用启动脚本 start-all.sh")
             # 修改 start-all.sh 中的 PROJECT_DIR
             stdin, stdout, stderr = client.exec_command(
                 f"cd {install_dir} && "
@@ -177,9 +232,12 @@ class DeployAgentTool(BaseTool):
             
             output = stdout.read().decode()
             exit_code = stdout.channel.recv_exit_status()
+            logger.info(f"[部署Agent] 启动脚本执行完成, 退出码: {exit_code}")
+            logger.debug(f"[部署Agent] 启动脚本输出: {output[:500]}")
             client.close()
             
             if exit_code != 0:
+                logger.error(f"[部署Agent] 启动脚本执行失败, 退出码: {exit_code}")
                 return {
                     "success": False,
                     "error": "启动脚本执行失败",
@@ -187,23 +245,28 @@ class DeployAgentTool(BaseTool):
                 }
             
             # 7. 验证 Agent 状态
+            logger.info(f"[部署Agent] 步骤7: 验证Agent状态")
             time.sleep(5)
             client = AgentClient(f"http://{server.ip}:8080", timeout=10)
             
             if not client.health_check():
+                logger.error(f"[部署Agent] Agent健康检查失败")
                 return {
                     "success": False,
                     "error": "Agent 启动失败，请检查日志",
                     "agent_id": agent_id
                 }
+            logger.info(f"[部署Agent] Agent健康检查通过")
             
             # 8. 更新数据库
+            logger.info(f"[部署Agent] 步骤8: 更新数据库")
             now = datetime.now()
             server.agent_id = agent_id
             server.agent_port = 8080
             server.updated_at = now
             self.db.update_server(server)
             
+            logger.info(f"[部署Agent] 部署成功 - Agent ID: {agent_id}")
             return {
                 "success": True,
                 "agent_id": agent_id,
@@ -217,8 +280,11 @@ class DeployAgentTool(BaseTool):
             }
             
         except subprocess.TimeoutExpired:
+            logger.error(f"[部署Agent] 部署超时")
             return {"success": False, "error": "部署超时"}
         except Exception as e:
+            logger.error(f"[部署Agent] 部署失败: {type(e).__name__}: {str(e)}")
+            logger.error(f"[部署Agent] 异常详情", exc_info=True)
             return {"success": False, "error": f"部署失败: {str(e)}"}
 
 
@@ -417,16 +483,52 @@ class UninstallAgentTool(BaseTool):
     
     def _ssh_connect(self, server) -> paramiko.SSHClient:
         """建立 SSH 连接"""
+        logger.info(f"[SSH] 开始连接服务器: {server.ip}:{server.port} (用户: {server.ssh_user})")
+        
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
-        if server.ssh_key_path:
-            client.connect(server.ip, port=server.port,
-                         username=server.ssh_user, key_filename=server.ssh_key_path, timeout=30)
-        else:
-            client.connect(server.ip, port=server.port,
-                         username=server.ssh_user, password=server.ssh_password_encrypted, timeout=30)
-        return client
+        try:
+            if server.ssh_key_path:
+                logger.info(f"[SSH] 使用密钥认证: {server.ssh_key_path}")
+                client.connect(
+                    server.ip, 
+                    port=server.port,
+                    username=server.ssh_user, 
+                    key_filename=server.ssh_key_path, 
+                    timeout=30,
+                    banner_timeout=30
+                )
+            else:
+                logger.info(f"[SSH] 使用密码认证（禁用公钥和agent）")
+                client.connect(
+                    server.ip, 
+                    port=server.port,
+                    username=server.ssh_user, 
+                    password=server.ssh_password_encrypted, 
+                    timeout=30,
+                    banner_timeout=30,
+                    allow_agent=False,      # 禁用SSH agent
+                    look_for_keys=False     # 禁用自动查找密钥文件
+                )
+            
+            logger.info(f"[SSH] 连接成功: {server.ip}:{server.port}")
+            return client
+            
+        except paramiko.AuthenticationException as e:
+            logger.error(f"[SSH] 认证失败 - {server.ip}:{server.port}: {str(e)}")
+            logger.error(f"[SSH] 认证方式: {'密钥' if server.ssh_key_path else '密码'}")
+            logger.error(f"[SSH] 用户名: {server.ssh_user}")
+            if not server.ssh_key_path:
+                logger.error(f"[SSH] 密码长度: {len(server.ssh_password_encrypted) if server.ssh_password_encrypted else 0}")
+            raise
+        except paramiko.SSHException as e:
+            logger.error(f"[SSH] SSH协议错误 - {server.ip}:{server.port}: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"[SSH] 连接异常 - {server.ip}:{server.port}: {type(e).__name__}: {str(e)}")
+            logger.error(f"[SSH] 异常详情", exc_info=True)
+            raise
     
     def execute(self, server_id: str, keep_data: bool = True, **kwargs) -> Dict[str, Any]:
         """调用 stop-all.sh 停止所有服务"""
