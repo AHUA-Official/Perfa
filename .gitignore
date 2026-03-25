@@ -60,3 +60,6 @@ src/mcp_server/examples/*.local.json
 src/langchain_agent/__pycache__/
 src/langchain_agent/**/__pycache__/
 logs/
+
+# 中期报告（含敏感信息，仅本地保留，勿提交）
+mid_report.md
