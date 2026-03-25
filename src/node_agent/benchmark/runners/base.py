@@ -4,7 +4,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-import subprocess
 
 from ..task import BenchmarkTask
 

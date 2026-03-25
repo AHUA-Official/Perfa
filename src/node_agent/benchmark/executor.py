@@ -45,16 +45,6 @@ class BenchmarkExecutor:
     4. 收集测试结果
     """
 
-    # 默认超时配置（秒）
-    DEFAULT_TIMEOUTS = {
-        "stream": 600,        # 10分钟
-        "superpi": 1800,      # 30分钟
-        "unixbench": 7200,    # 2小时
-        "mlc": 3600,          # 1小时
-        "fio": 3600,          # 1小时
-        "hping3": 1800,       # 30分钟
-    }
-
     def __init__(self, tool_manager, data_dir: str = "/var/lib/node_agent",
                  working_dir: str = "/tmp/benchmark_work"):
         """
@@ -196,7 +186,10 @@ class BenchmarkExecutor:
             
             # 检查工具
             tool_status = self.tool_manager.check_tool(task.test_name)
-            if tool_status.get("status") != "installed":
+            status = tool_status.get("status")
+            # 支持 Enum 和字符串两种格式
+            status_value = status.value if hasattr(status, 'value') else status
+            if status_value != "installed":
                 raise ToolNotInstalledError(
                     f"Tool {task.test_name} not installed: {tool_status}"
                 )

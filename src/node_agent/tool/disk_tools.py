@@ -2,7 +2,7 @@
 磁盘压力测试工具
 """
 import tempfile
-import os
+from pathlib import Path
 from typing import Dict
 import logging
 
@@ -21,14 +21,13 @@ class FioTool(BaseTool):
             description="FIO - 灵活的I/O测试工具",
             category="disk"
         )
-        self.apt_package = "fio"
+        self.package_name = "fio"
     
     def install(self) -> bool:
         """安装FIO"""
         logger.info(f"Installing {self.name}...")
         
-        # FIO可以通过apt安装
-        if self._apt_install(self.apt_package):
+        if self._install_package(self.package_name):
             self.binary_path = "/usr/bin/fio"
             logger.info(f"Successfully installed {self.name}")
             return True
@@ -71,8 +70,7 @@ class FioTool(BaseTool):
         # 快速测试：最小化 I/O 测试
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
-                # 创建最小化测试配置
-                config_file = os.path.join(tmpdir, "test.fio")
+                config_file = Path(tmpdir) / "test.fio"
                 with open(config_file, 'w') as f:
                     f.write(f"""[global]
 size=1M
@@ -87,7 +85,7 @@ numjobs=1
 """)
                 
                 returncode, stdout, stderr = self._run_command(
-                    ["fio", config_file],
+                    ["fio", str(config_file)],
                     timeout=3
                 )
                 
@@ -100,7 +98,7 @@ numjobs=1
         """卸载FIO"""
         logger.info(f"Uninstalling {self.name}...")
         
-        if self._apt_remove(self.apt_package):
+        if self._remove_package(self.package_name):
             self.binary_path = None
             logger.info(f"Successfully uninstalled {self.name}")
             return True

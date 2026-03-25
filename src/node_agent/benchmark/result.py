@@ -2,6 +2,7 @@
 结果采集器
 负责收集、存储和查询压测结果
 """
+import configparser
 import sqlite3
 import json
 import logging
@@ -121,7 +122,6 @@ class ResultCollector:
         os_info = "Unknown"
         try:
             # 读取 /etc/os-release 获取发行版信息
-            import configparser
             with open('/etc/os-release') as f:
                 lines = f.readlines()
                 for line in lines:

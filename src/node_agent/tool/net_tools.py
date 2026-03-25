@@ -19,14 +19,13 @@ class Hping3Tool(BaseTool):
             description="hping3 - 网络探测和压力测试工具",
             category="net"
         )
-        self.apt_package = "hping3"
+        self.package_name = "hping3"
     
     def install(self) -> bool:
         """安装hping3"""
         logger.info(f"Installing {self.name}...")
         
-        # hping3可以通过apt安装
-        if self._apt_install(self.apt_package):
+        if self._install_package(self.package_name):
             self.binary_path = "/usr/sbin/hping3"
             logger.info(f"Successfully installed {self.name}")
             return True
@@ -81,7 +80,7 @@ class Hping3Tool(BaseTool):
         """卸载hping3"""
         logger.info(f"Uninstalling {self.name}...")
         
-        if self._apt_remove(self.apt_package):
+        if self._remove_package(self.package_name):
             self.binary_path = None
             logger.info(f"Successfully uninstalled {self.name}")
             return True

@@ -92,11 +92,6 @@ class BenchmarkParams:
             k: v for k, v in self.__dict__.items()
             if not k.startswith('_')
         }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'BenchmarkParams':
-        """从字典创建"""
-        return cls(**{k: v for k, v in data.items() if hasattr(cls, k)})
 
 
 # ========== 各工具参数定义 ==========

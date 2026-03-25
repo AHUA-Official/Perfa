@@ -1,7 +1,6 @@
 """
 内存压力测试工具
 """
-import os
 import shutil
 import tarfile
 from pathlib import Path

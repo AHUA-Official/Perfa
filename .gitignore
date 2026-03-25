@@ -3,9 +3,6 @@
 .vscode/
 
 # 虚拟环境
-# mvp1的虚拟环境
-mvps/mvp1/venv/
-# 根目录的虚拟环境
 venv/
 
 # 环境变量文件（所有目录）
@@ -19,10 +16,6 @@ __pycache__/
 *.so
 .Python
 
-# mvp1
-mvps/mvp1/__pycache__/
-mvps/mvp1/perfa_mvp1/__pycache__/
-mvps/mvp1/perfa.db
 
 # node_agent
 src/node_agent/__pycache__/

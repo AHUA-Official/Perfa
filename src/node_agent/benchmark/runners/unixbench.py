@@ -28,9 +28,14 @@ class UnixBenchRunner(BaseRunner):
             return False
         
         status = tool.check()
-        if status.get("status") != "installed":
-            return False
+        status_value = status.get("status")
+        # 支持 Enum 和字符串两种格式
+        if hasattr(status_value, 'value'):
+            status_value = status_value.value
         
+        if status_value != "installed":
+            return False
+
         # UnixBench wrapper 脚本路径
         self.binary_path = tool.binary_path
         return True

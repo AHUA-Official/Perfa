@@ -6,7 +6,10 @@
 import logging
 from typing import Dict, Any
 from abc import ABC, abstractmethod
-from prometheus_client import Gauge, Counter, Info, REGISTRY
+
+import psutil
+from prometheus_client import Gauge, Counter, Info
+
 from .info import system_info
 
 logger = logging.getLogger(__name__)
@@ -24,14 +27,6 @@ class BaseCollector(ABC):
     def collect(self) -> Dict[str, Any]:
         """采集指标"""
         pass
-    
-    def _safe_collect(self, collector_name: str) -> Dict[str, Any]:
-        """安全的采集包装器"""
-        try:
-            return self.collect()
-        except Exception as e:
-            logger.error(f"{collector_name} 采集失败: {e}")
-            return {}
 
 
 class CPUCollector(BaseCollector):
@@ -50,8 +45,6 @@ class CPUCollector(BaseCollector):
     
     def collect(self) -> Dict[str, Any]:
         """采集 CPU 指标"""
-        import psutil
-        
         cpu_percent = psutil.cpu_percent(interval=1.0)
         cpu_count = psutil.cpu_count()
         cpu_freq = psutil.cpu_freq()
@@ -95,8 +88,6 @@ class MemoryCollector(BaseCollector):
     
     def collect(self) -> Dict[str, Any]:
         """采集内存指标"""
-        import psutil
-        
         mem = psutil.virtual_memory()
         swap = psutil.swap_memory()
         
@@ -142,12 +133,9 @@ class DiskCollector(BaseCollector):
         """
         self.path = path
         self.labels = {**system_info.get_labels(), 'path': path}
-        self.labels_no_path = system_info.get_labels()
     
     def collect(self) -> Dict[str, Any]:
         """采集磁盘指标"""
-        import psutil
-        
         disk = psutil.disk_usage(self.path)
         disk_io = psutil.disk_io_counters()
         
@@ -191,8 +179,6 @@ class NetworkCollector(BaseCollector):
     
     def collect(self) -> Dict[str, Any]:
         """采集网络指标"""
-        import psutil
-        
         net_io = psutil.net_io_counters()
         net_connections = len(psutil.net_connections())
         

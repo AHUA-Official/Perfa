@@ -2,7 +2,6 @@
 HTTP API 服务器
 """
 import logging
-import os
 import threading
 from pathlib import Path
 from typing import Optional

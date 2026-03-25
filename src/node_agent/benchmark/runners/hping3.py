@@ -29,7 +29,12 @@ class Hping3Runner(BaseRunner):
             return False
         
         status = tool.check()
-        if status.get("status") != "installed":
+        status_value = status.get("status")
+        # 支持 Enum 和字符串两种格式
+        if hasattr(status_value, 'value'):
+            status_value = status_value.value
+        
+        if status_value != "installed":
             return False
         
         self.binary_path = tool.binary_path
@@ -149,9 +154,5 @@ class Hping3Runner(BaseRunner):
         count = params.get("count", 10)
         if count < 1 or count > 100000:
             errors.append("count must be between 1 and 100000")
-        
-        if mode == "flood" and count:
-            # flood模式下count参数无效，会持续发送直到中断
-            pass
         
         return errors

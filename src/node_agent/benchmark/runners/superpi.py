@@ -29,7 +29,12 @@ class SuperPiRunner(BaseRunner):
             return False
         
         status = tool.check()
-        if status.get("status") != "installed":
+        status_value = status.get("status")
+        # 支持 Enum 和字符串两种格式
+        if hasattr(status_value, 'value'):
+            status_value = status_value.value
+        
+        if status_value != "installed":
             return False
         
         self.binary_path = tool.binary_path
@@ -124,11 +129,5 @@ class SuperPiRunner(BaseRunner):
             errors.append("digits must be at least 1000")
         if digits > 100000000:  # 1亿位
             errors.append("digits too large, max 100,000,000")
-        
-        # 常用位数
-        common_digits = [1000, 10000, 100000, 1000000, 4000000, 16000000, 32000000]
-        if digits not in common_digits:
-            # 警告但不报错
-            pass
         
         return errors

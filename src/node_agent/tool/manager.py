@@ -3,7 +3,7 @@
 统一管理所有压力测试工具的生命周期
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from pathlib import Path
 
 from .base import BaseTool, ToolStatus
@@ -95,10 +95,16 @@ class ToolManager:
         tool = self.tools[tool_name]
         status = tool.check()
         
+        # 将 Enum 转换为字符串
+        status_value = status["status"].value if hasattr(status["status"], 'value') else status["status"]
+        
         return {
             "success": True,
             "tool": tool_name,
-            **status,
+            "status": status_value,
+            "binary_path": status.get("binary_path"),
+            "version": status.get("version"),
+            "message": status.get("message"),
             "info": tool.get_info()
         }
     
@@ -156,7 +162,7 @@ class ToolManager:
                     "name": name,
                     "description": tool.description,
                     "category": tool.category,
-                    "status": status["status"],
+                    "status": status["status"].value if hasattr(status["status"], 'value') else status["status"],
                     "binary_path": status.get("binary_path"),
                     "version": status.get("version")
                 })
@@ -231,7 +237,7 @@ class ToolManager:
                 results.append({
                     "tool": name,
                     "category": tool.category,
-                    "status": status["status"],
+                    "status": status["status"].value if hasattr(status["status"], 'value') else status["status"],
                     "binary_path": status.get("binary_path"),
                     "version": status.get("version"),
                     "message": status["message"],

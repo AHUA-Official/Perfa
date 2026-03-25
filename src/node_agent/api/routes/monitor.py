@@ -1,10 +1,15 @@
 """
 监控相关路由
 """
+import html
 import os
+import re
 import shutil
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
+
+import psutil
 from flask import Blueprint, request
 
 from ..responses import success, error_response, ErrorCodes
@@ -122,8 +127,6 @@ def system_status():
     GET /api/system/status
     返回: CPU、内存、磁盘、网络的实时使用情况
     """
-    import psutil
-    
     try:
         # CPU
         cpu_percent = psutil.cpu_percent(interval=0.5)
@@ -300,7 +303,6 @@ def storage_cleanup():
     if clean_logs:
         log_dir = data_dir / "logs"
         if log_dir.exists():
-            from datetime import datetime, timedelta
             cutoff = datetime.now() - timedelta(days=keep_logs_days)
             
             for log_file in log_dir.glob("*.log"):
@@ -343,10 +345,8 @@ def storage_cleanup():
     # 清理旧结果（从数据库）
     if clean_old_results and agent and hasattr(agent, 'benchmark_executor'):
         try:
-            from datetime import datetime, timedelta
             cutoff = datetime.now() - timedelta(days=keep_results_days)
             
-            import sqlite3
             db_path = data_dir / "benchmark_results.db"
             if db_path.exists():
                 conn = sqlite3.connect(db_path)
@@ -469,8 +469,6 @@ def get_log_content(log_name: str):
     
     GET /api/storage/logs/<log_name>?lines=500
     """
-    import re
-    
     # 安全检查：只允许 .log 文件，防止路径遍历攻击
     if not log_name.endswith('.log') or '..' in log_name or '/' in log_name:
         return error_response(ErrorCodes.INVALID_PARAMS, "Invalid log file name")
@@ -495,7 +493,6 @@ def get_log_content(log_name: str):
         content = '\n'.join(content_lines)
         
         # 转义 HTML 特殊字符（防止 XSS）
-        import html
         content = html.escape(content)
         
         return success({

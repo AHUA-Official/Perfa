@@ -2,9 +2,9 @@
 工具基类定义
 """
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Dict, Optional
 import subprocess
-import os
 import shutil
 import logging
 from pathlib import Path
@@ -13,11 +13,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-class ToolStatus:
+class ToolStatus(Enum):
     """工具状态枚举"""
     NOT_INSTALLED = "not_installed"
     INSTALLED = "installed"
-    AVAILABLE = "available"  # 系统自带或apt可安装
+    AVAILABLE = "available"
     ERROR = "error"
 
 
@@ -149,6 +149,50 @@ class BaseTool(ABC):
             return "yum"
         return None
 
+    def _wait_for_apt_lock(self, timeout: int = 60) -> bool:
+        """
+        等待 apt 锁释放
+        
+        Args:
+            timeout: 超时时间（秒）
+        
+        Returns:
+            是否成功获取锁
+        """
+        import time
+        
+        lock_files = [
+            "/var/lib/dpkg/lock-frontend",
+            "/var/lib/dpkg/lock",
+            "/var/lib/apt/lists/lock",
+            "/var/cache/apt/archives/lock"
+        ]
+        
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            # 检查是否所有锁都可用
+            locks_held = []
+            for lock_file in lock_files:
+                if os.path.exists(lock_file):
+                    try:
+                        # 尝试获取锁信息
+                        result = subprocess.run(
+                            ["lsof", lock_file],
+                            capture_output=True, text=True, timeout=2
+                        )
+                        if result.returncode == 0 and result.stdout.strip():
+                            locks_held.append(lock_file)
+                    except Exception:
+                        pass
+            
+            if not locks_held:
+                return True
+            
+            logger.info(f"Waiting for apt lock... (held by other process)")
+            time.sleep(2)
+        
+        return False
+
     def _install_package(self, package: str) -> bool:
         """
         使用系统包管理器安装包
@@ -166,7 +210,12 @@ class BaseTool(ABC):
         
         logger.info(f"Installing {package} via {pm}...")
         
+        # apt 需要等待锁
         if pm == "apt":
+            if not self._wait_for_apt_lock():
+                logger.error(f"Failed to acquire apt lock after timeout. Another package manager is running. Please wait and try again.")
+                return False
+            
             returncode, stdout, stderr = self._run_command(
                 ["sudo", "apt-get", "install", "-y", package]
             )
@@ -183,7 +232,11 @@ class BaseTool(ABC):
             logger.info(f"Successfully installed {package}")
             return True
         else:
-            logger.error(f"Failed to install {package}: {stderr}")
+            # 提供更友好的错误提示
+            error_msg = stderr.strip() if stderr else "Unknown error"
+            if "lock" in error_msg.lower():
+                error_msg = "Package manager is locked by another process. Please wait and try again."
+            logger.error(f"Failed to install {package}: {error_msg}")
             return False
 
     def _remove_package(self, package: str) -> bool:
@@ -203,7 +256,12 @@ class BaseTool(ABC):
         
         logger.info(f"Removing {package} via {pm}...")
         
+        # apt 需要等待锁
         if pm == "apt":
+            if not self._wait_for_apt_lock():
+                logger.error(f"Failed to acquire apt lock after timeout. Another package manager is running. Please wait and try again.")
+                return False
+            
             returncode, stdout, stderr = self._run_command(
                 ["sudo", "apt-get", "remove", "-y", package]
             )
@@ -220,16 +278,12 @@ class BaseTool(ABC):
             logger.info(f"Successfully removed {package}")
             return True
         else:
-            logger.error(f"Failed to remove {package}: {stderr}")
+            # 提供更友好的错误提示
+            error_msg = stderr.strip() if stderr else "Unknown error"
+            if "lock" in error_msg.lower():
+                error_msg = "Package manager is locked by another process. Please wait and try again."
+            logger.error(f"Failed to remove {package}: {error_msg}")
             return False
-
-    def _apt_install(self, package: str) -> bool:
-        """使用apt安装包（兼容旧代码）"""
-        return self._install_package(package)
-
-    def _apt_remove(self, package: str) -> bool:
-        """使用apt卸载包（兼容旧代码）"""
-        return self._remove_package(package)
     
     def _make_executable(self, file_path: Path):
         """

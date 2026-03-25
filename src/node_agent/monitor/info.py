@@ -117,14 +117,3 @@ class SystemInfo:
 
 # 全局实例
 system_info = SystemInfo()
-
-
-if __name__ == "__main__":
-    # 测试
-    info = SystemInfo()
-    print("系统信息:")
-    for k, v in info.info.items():
-        print(f"  {k}: {v}")
-    print("\nPrometheus 标签:")
-    for k, v in info.get_labels().items():
-        print(f"  {k}={v}")
