@@ -77,7 +77,12 @@ async def chat_completions(request: ChatRequest):
         # Streaming mode
         if request.stream:
             return StreamingResponse(
-                stream_chat_response(user_query, session_id=session_id, conversation_id=conversation_id),
+                stream_chat_response(
+                    user_query,
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    server_id=request.server_id,
+                ),
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
@@ -90,7 +95,8 @@ async def chat_completions(request: ChatRequest):
         result = await orchestrator.process_query(
             user_query,
             session_id=session_id,
-            conversation_id=conversation_id
+            conversation_id=conversation_id,
+            server_id=request.server_id,
         )
 
         if not result.get("success", result.get("is_success", False)):
@@ -119,7 +125,8 @@ async def chat_completions(request: ChatRequest):
 async def stream_chat_response(
     query: str,
     session_id: Optional[str] = None,
-    conversation_id: Optional[str] = None
+    conversation_id: Optional[str] = None,
+    server_id: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream chat response using SSE (Server-Sent Events)
@@ -215,7 +222,8 @@ async def stream_chat_response(
             async for event in orchestrator.process_query_stream(
                 query,
                 session_id=session_id,
-                conversation_id=conversation_id
+                conversation_id=conversation_id,
+                server_id=server_id,
             ):
                 event_type = event.get("type")
                 if event.get("session_id"):
@@ -328,7 +336,11 @@ async def stream_chat_response(
         except AttributeError:
             # 降级：如果 orchestrator 没有 process_query_stream，走同步模式
             logger.warning("process_query_stream 不可用，降级到同步流式")
-            result = await orchestrator.process_query(query, session_id=session_id)
+            result = await orchestrator.process_query(
+                query,
+                session_id=session_id,
+                server_id=getattr(request, "server_id", None),
+            )
             
             if not trace_id_hex and result.get("trace_id"):
                 trace_id_hex = result.get("trace_id")
@@ -850,31 +862,54 @@ async def list_reports():
     try:
         orchestrator = await get_orchestrator()
         tools_dict = orchestrator.tools_dict
+        list_servers_tool = tools_dict.get("list_servers")
         list_reports_tool = tools_dict.get("list_benchmark_history")
 
-        if list_reports_tool:
-            result = await list_reports_tool.ainvoke({})
+        if not list_servers_tool or not list_reports_tool:
+            return ReportListResponse(reports=[])
+
+        servers_result = await list_servers_tool.ainvoke({})
+        if isinstance(servers_result, str):
+            import json as _json
+            try:
+                servers_result = _json.loads(servers_result)
+            except _json.JSONDecodeError:
+                servers_result = []
+
+        servers = servers_result if isinstance(servers_result, list) else servers_result.get("servers", [])
+        reports = []
+
+        for server in servers:
+            if not isinstance(server, dict):
+                continue
+            server_id = server.get("server_id")
+            if not server_id:
+                continue
+
+            result = await list_reports_tool.ainvoke({"server_id": server_id})
             if isinstance(result, str):
                 import json as _json
                 try:
                     result = _json.loads(result)
                 except _json.JSONDecodeError:
-                    result = []
+                    result = {}
 
-            reports = []
-            for r in (result if isinstance(result, list) else result.get("reports", [])):
+            if not isinstance(result, dict) or not result.get("success", True):
+                continue
+
+            for r in result.get("results", []):
                 if isinstance(r, dict):
                     reports.append(ReportInfo(
                         id=r.get("task_id", r.get("id", "")),
                         type=r.get("type", r.get("benchmark_type", "unknown")),
-                        server_id=r.get("server_id", r.get("server", "")),
+                        server_id=r.get("server_id", server_id),
                         created_at=r.get("created_at", r.get("start_time", "")),
                         status=r.get("status", "completed"),
                         summary=r.get("summary"),
                     ))
-            return ReportListResponse(reports=reports)
 
-        return ReportListResponse(reports=[])
+        reports.sort(key=lambda report: report.created_at or "", reverse=True)
+        return ReportListResponse(reports=reports)
     except Exception as e:
         logger.error(f"List reports error: {e}")
         return ReportListResponse(reports=[])

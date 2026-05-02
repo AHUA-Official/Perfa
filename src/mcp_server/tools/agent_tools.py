@@ -1,4 +1,5 @@
 """Agent 生命周期管理工具"""
+import os
 import uuid
 import time
 import logging
@@ -19,8 +20,8 @@ LOCAL_PERFA_DIR = "/home/ubuntu/Perfa"
 DEFAULT_INSTALL_DIR = "/opt/perfa"
 
 
-REMOTE_INFRA_START_SCRIPT = "ops/scripts/start-local-infra.sh"
-REMOTE_INFRA_STOP_SCRIPT = "ops/scripts/stop-local-infra.sh"
+REMOTE_INFRA_START_SCRIPT = "ops/scripts/start-point.sh"
+REMOTE_INFRA_STOP_SCRIPT = "ops/scripts/stop-point.sh"
 
 
 class DeployAgentTool(BaseTool):
@@ -190,13 +191,17 @@ class DeployAgentTool(BaseTool):
 
     def _restart_agent_only(self, client: paramiko.SSHClient, install_dir: str) -> tuple[int, str, str]:
         """仅重装并重启 node_agent，避免每次带上整套监控栈"""
+        log_dir = f"{install_dir}/logs"
+        log_file = f"{log_dir}/node_agent.log"
         command = (
+            f"mkdir -p {log_dir} && "
             f"cd {install_dir}/src/node_agent && "
             f"pip3 install -q -r requirements.txt 2>/dev/null || "
             f"pip3 install -q flask prometheus-client psutil pydantic requests && "
             f"pkill -f '[p]ython3 main.py' || true && "
             f"sleep 2 && "
-            f"setsid python3 main.py >/tmp/agent.log 2>&1 < /dev/null &"
+            f"export PERFA_LOG_TO_STDOUT=false PERFA_NODE_AGENT_LOG='{log_file}' && "
+            f"setsid python3 main.py >>'{log_file}' 2>&1 < /dev/null &"
         )
         stdin, stdout, stderr = client.exec_command(command, timeout=180)
         output = stdout.read().decode()
@@ -204,8 +209,10 @@ class DeployAgentTool(BaseTool):
         exit_code = stdout.channel.recv_exit_status()
         return exit_code, output, error_output
 
-    def _wait_for_agent_health(self, server, attempts: int = 12, interval_sec: int = 5) -> bool:
+    def _wait_for_agent_health(self, server, attempts: Optional[int] = None, interval_sec: Optional[int] = None) -> bool:
         """轮询等待 Agent 健康检查通过，避免重启后短暂未就绪就误判失败"""
+        attempts = attempts or int(os.getenv("DEPLOY_AGENT_HEALTH_ATTEMPTS", "36"))
+        interval_sec = interval_sec or int(os.getenv("DEPLOY_AGENT_HEALTH_INTERVAL_SEC", "5"))
         client = AgentClient(f"http://{server.ip}:8080", timeout=10)
         for attempt in range(1, attempts + 1):
             if client.health_check():
@@ -318,7 +325,7 @@ class DeployAgentTool(BaseTool):
                 logger.error(f"[部署Agent] Agent健康检查失败")
                 return {
                     "success": False,
-                    "error": "Agent 启动失败，请检查日志",
+                    "error": f"Agent 启动失败，请检查日志（等待就绪超时：{int(os.getenv('DEPLOY_AGENT_HEALTH_ATTEMPTS', '36')) * int(os.getenv('DEPLOY_AGENT_HEALTH_INTERVAL_SEC', '5'))}秒）",
                     "agent_id": agent_id
                 }
             logger.info(f"[部署Agent] Agent健康检查通过")

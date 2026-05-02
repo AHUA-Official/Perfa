@@ -1,5 +1,22 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api';
 
+async function parseApiResponse<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) {
+      const errorMessage = data?.error || data?.detail || `HTTP ${res.status}`;
+      throw new Error(errorMessage);
+    }
+    return data as T;
+  }
+
+  const text = (await res.text()).trim();
+  const fallbackMessage = text || `HTTP ${res.status}`;
+  throw new Error(fallbackMessage);
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -10,6 +27,7 @@ export interface ChatCompletionRequest {
   messages: ChatMessage[];
   stream?: boolean;
   temperature?: number;
+  server_id?: string | null;
 }
 
 export interface ServerInfo {
@@ -107,18 +125,19 @@ export interface SessionDetail {
 /** 非流式对话 */
 export async function chatCompletion(
   messages: ChatMessage[],
-  options?: { model?: string; temperature?: number }
+  options?: { model?: string; temperature?: number; serverId?: string | null }
 ): Promise<string> {
   const res = await fetch(`${API_BASE}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: options?.model || 'perfa-agent',
-      messages,
-      stream: false,
-      temperature: options?.temperature,
-    }),
-  });
+      body: JSON.stringify({
+        model: options?.model || 'perfa-agent',
+        messages,
+        stream: false,
+        temperature: options?.temperature,
+        server_id: options?.serverId || undefined,
+      }),
+    });
 
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   const data = await res.json();
@@ -128,18 +147,19 @@ export async function chatCompletion(
 /** 流式对话 — 返回 ReadableStream */
 export async function chatCompletionStream(
   messages: ChatMessage[],
-  options?: { model?: string; temperature?: number }
+  options?: { model?: string; temperature?: number; serverId?: string | null }
 ): Promise<ReadableStream<Uint8Array>> {
   const res = await fetch(`${API_BASE}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: options?.model || 'perfa-agent',
-      messages,
-      stream: true,
-      temperature: options?.temperature,
-    }),
-  });
+      body: JSON.stringify({
+        model: options?.model || 'perfa-agent',
+        messages,
+        stream: true,
+        temperature: options?.temperature,
+        server_id: options?.serverId || undefined,
+      }),
+    });
 
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   if (!res.body) throw new Error('No response body');
@@ -166,7 +186,7 @@ export async function deployServerAgent(
       agent_only: options?.agentOnly ?? true,
     }),
   });
-  return res.json();
+  return parseApiResponse<AgentActionResult>(res);
 }
 
 export async function uninstallServerAgent(
@@ -180,12 +200,12 @@ export async function uninstallServerAgent(
       keep_data: options?.keepData ?? true,
     }),
   });
-  return res.json();
+  return parseApiResponse<AgentActionResult>(res);
 }
 
 export async function getServerAgentStatus(serverId: string): Promise<AgentActionResult> {
   const res = await fetch(`${API_BASE}/v1/servers/${serverId}/agent/status`);
-  return res.json();
+  return parseApiResponse<AgentActionResult>(res);
 }
 
 /** 获取报告列表 */
