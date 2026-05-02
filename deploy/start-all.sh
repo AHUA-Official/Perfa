@@ -4,6 +4,8 @@
 
 set -e
 
+NODE_AGENT_CMD="/home/ubuntu/Perfa/src/node_agent/main.py"
+
 # 自动检测脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -72,14 +74,14 @@ echo ""
 
 # 3. 启动 Node Agent
 echo "[3/3] 启动 Node Agent..."
-if pgrep -f "python3 main.py" > /dev/null; then
+if pgrep -f "$NODE_AGENT_CMD" > /dev/null; then
     echo "      Node Agent 已在运行"
 else
     cd $AGENT_DIR
-    nohup python3 main.py > /tmp/agent.log 2>&1 &
+    nohup python3 "$NODE_AGENT_CMD" > /tmp/agent.log 2>&1 &
     
     sleep 2
-    if pgrep -f "python3 main.py" > /dev/null; then
+    if pgrep -f "$NODE_AGENT_CMD" > /dev/null; then
         echo "      ✅ Node Agent 启动成功"
         echo "         - 控制面板: http://localhost:8080"
         echo "         - Prometheus: http://localhost:8000/metrics"

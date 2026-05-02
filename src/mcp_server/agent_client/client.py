@@ -43,9 +43,11 @@ class AgentClient:
     def get_status(self) -> AgentStatus:
         """获取 Agent 状态"""
         data = self._request("GET", "/api/status")
-        # 兼容 Agent 不返回 status 字段的情况
-        if "status" not in data:
-            data["status"] = "online"
+        # 兼容 Agent 降级或返回字段不完整的情况
+        data.setdefault("status", "online")
+        data.setdefault("agent_id", "unknown")
+        data.setdefault("version", "unknown")
+        data.setdefault("uptime_seconds", 0)
         return AgentStatus(**data)
     
     def get_system_info(self) -> SystemInfo:
@@ -113,7 +115,7 @@ class AgentClient:
     def cancel_benchmark(self, task_id: str) -> bool:
         """取消任务"""
         data = self._request("POST", "/api/benchmark/cancel", json={"task_id": task_id})
-        return data.get("cancelled", False)
+        return data.get("cancelled", False) or data.get("status") == "cancelled"
     
     def get_current_task(self) -> Optional[Dict[str, Any]]:
         """获取当前运行的任务"""

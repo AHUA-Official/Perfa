@@ -4,6 +4,8 @@
 
 set -e
 
+NODE_AGENT_CMD="/home/ubuntu/Perfa/src/node_agent/main.py"
+
 echo "================================================"
 echo "    Perfa 全栈停止"
 echo "================================================"
@@ -11,14 +13,14 @@ echo ""
 
 # 1. 停止 Node Agent
 echo "[1/3] 停止 Node Agent..."
-if pgrep -f "python3 main.py" > /dev/null; then
+if pgrep -f "$NODE_AGENT_CMD" > /dev/null; then
     # 先发送 SIGTERM 优雅停止
-    pkill -TERM -f "python3 main.py"
+    pkill -TERM -f "$NODE_AGENT_CMD"
     sleep 2
     
     # 如果还在运行，强制杀死
-    if pgrep -f "python3 main.py" > /dev/null; then
-        pkill -9 -f "python3 main.py"
+    if pgrep -f "$NODE_AGENT_CMD" > /dev/null; then
+        pkill -9 -f "$NODE_AGENT_CMD"
         sleep 1
     fi
     echo "      ✅ Node Agent 已停止"

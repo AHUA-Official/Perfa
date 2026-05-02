@@ -300,10 +300,7 @@ class BenchmarkExecutor:
             # ========== 完成 ==========
             status = TaskStatus.COMPLETED if returncode == 0 else TaskStatus.FAILED
             self._update_status(task, status)
-            
-            # 保存结果
-            self.result_collector.collect(task, task.result)
-            
+
         except Exception as e:
             logger.error(f"Task {task.task_id} failed: {e}")
             task.error = str(e)

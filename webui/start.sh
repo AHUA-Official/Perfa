@@ -12,14 +12,22 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# 检查 docker-compose 是否安装
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ docker-compose 未安装，请先安装 docker-compose"
+# 检查 compose 可用性
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+elif docker compose version &> /dev/null; then
+    COMPOSE_CMD="docker compose"
+else
+    echo "❌ docker-compose / docker compose 未安装，请先安装 Docker Compose"
     exit 1
 fi
 
 # 启动服务
-docker-compose up -d
+if [ "$COMPOSE_CMD" = "docker compose" ]; then
+    docker compose up -d
+else
+    docker-compose up -d
+fi
 
 # 检查状态
 if [ $? -eq 0 ]; then
@@ -30,10 +38,10 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "配置说明："
     echo "  - API 地址：http://host.docker.internal:10000/v1"
-    echo "  - 确保后端已启动在 8080 端口"
+    echo "  - 确保后端已启动在 10000 端口"
     echo ""
     echo "停止服务："
-    echo "  docker-compose down"
+    echo "  ${COMPOSE_CMD} down"
 else
     echo "❌ 启动失败"
     exit 1

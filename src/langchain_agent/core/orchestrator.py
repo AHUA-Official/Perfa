@@ -706,7 +706,17 @@ class AgentOrchestrator:
         # 补充工作流元信息
         result["mode"] = "workflow"
         result["scenario"] = scenario_name
-        result["is_success"] = result.get("success", False)
+        success = result.get("success", False)
+        result["success"] = success
+        result["is_success"] = success
+        if "current_node" not in result:
+            result["current_node"] = next(
+                (
+                    node for node, status in result.get("node_statuses", {}).items()
+                    if status == "running"
+                ),
+                result.get("completed_nodes", [])[-1] if result.get("completed_nodes") else None
+            )
         
         # 兼容字段
         if "thinking_process" not in result:

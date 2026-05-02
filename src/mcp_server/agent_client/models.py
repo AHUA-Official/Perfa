@@ -1,15 +1,14 @@
 """Agent 返回的数据模型"""
-from pydantic import BaseModel, field_validator
-from datetime import datetime
+from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
 
 class AgentStatus(BaseModel):
     """Agent 状态"""
-    agent_id: str
+    agent_id: str = "unknown"
     status: str = "online"  # 默认 online，兼容 Agent 不返回此字段
-    version: str
-    uptime_seconds: int
+    version: str = "unknown"
+    uptime_seconds: int = 0
     current_task: Optional[Dict[str, Any]] = None
     monitor_running: bool = False  # 兼容 Agent 额外返回的字段
 

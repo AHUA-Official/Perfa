@@ -92,6 +92,12 @@ async def chat_completions(request: ChatRequest):
             session_id=session_id,
             conversation_id=conversation_id
         )
+
+        if not result.get("success", result.get("is_success", False)):
+            raise HTTPException(
+                status_code=502,
+                detail=result.get("error") or "Query processing failed"
+            )
         
         # Format response
         content = format_response_markdown(result)
