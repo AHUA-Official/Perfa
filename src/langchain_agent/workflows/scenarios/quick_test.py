@@ -72,20 +72,27 @@ def _infer_test_name(query: str) -> str:
     query_lower = query.lower()
     
     test_keywords = {
+        "iperf3": ["iperf3", "网络吞吐", "带宽测试", "吞吐测试"],
         "unixbench": ["unixbench", "cpu综合", "cpu综合性能"],
         "superpi": ["superpi", "super_pi", "pi计算", "浮点"],
         "stream": ["stream", "内存带宽", "内存性能"],
         "fio": ["fio", "磁盘", "io", "硬盘", "存储io"],
         "mlc": ["mlc", "内存延迟", "延迟测试"],
         "hping3": ["hping3", "网络延迟", "网络", "ping", "丢包"],
+        "sysbench_cpu": ["sysbench cpu", "快速cpu", "短cpu", "cpu快测", "cpu快速测试"],
+        "sysbench_memory": ["sysbench memory", "快速内存", "短内存", "memory quick", "内存快测"],
+        "sysbench_threads": ["sysbench threads", "线程测试", "锁竞争", "线程调度"],
+        "openssl_speed": ["openssl speed", "加密性能", "openssl", "aes性能", "crypto benchmark"],
+        "stress_ng": ["stress-ng", "stress ng", "快速压力", "短压测", "压力指标"],
+        "7z_b": ["7z", "7zip", "压缩性能", "7z b"],
     }
-    
+
     for test_name, keywords in test_keywords.items():
         for kw in keywords:
             if kw in query_lower:
                 return test_name
     
-    return "unixbench"
+    return "sysbench_cpu"
 
 
 from langchain_agent.core.logger import get_logger

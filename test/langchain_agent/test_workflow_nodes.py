@@ -15,6 +15,7 @@ from langchain_agent.workflows.nodes import (
     route_after_tool_check,
     route_after_install,
 )
+from langchain_agent.workflows.scenarios.quick_test import _infer_test_name
 
 
 class _SyncTool:
@@ -26,6 +27,12 @@ class _SyncTool:
 
 
 class WorkflowNodesTestCase(unittest.IsolatedAsyncioTestCase):
+    def test_quick_test_infers_new_short_benchmarks(self):
+        self.assertEqual(_infer_test_name("帮我跑个 sysbench cpu"), "sysbench_cpu")
+        self.assertEqual(_infer_test_name("做一个快速内存测试，sysbench memory"), "sysbench_memory")
+        self.assertEqual(_infer_test_name("测试一下 iperf3 网络吞吐"), "iperf3")
+        self.assertEqual(_infer_test_name("来个 openssl speed"), "openssl_speed")
+
     async def test_check_environment_reads_server_id_from_list_servers_result(self):
         state = {
             "scenario": "cpu_focus",

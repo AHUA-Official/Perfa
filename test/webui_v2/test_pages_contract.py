@@ -22,6 +22,8 @@ class WebUIPageContractTests(unittest.TestCase):
         self.assertIn("consumeSSEStream", content)
         self.assertIn("listServers", content)
         self.assertIn("listSessions", content)
+        self.assertIn("getLatestReport", content)
+        self.assertIn("getTraceSummary", content)
         self.assertIn("/v1/chat/completions", content)
         self.assertIn("workflowStatus", content)
         self.assertIn("traceId", content)
@@ -41,6 +43,8 @@ class WebUIPageContractTests(unittest.TestCase):
         self.assertIn("暂无测试报告", reports)
         for proxy in ["/api/jaeger", "/api/grafana", "/api/vm"]:
             self.assertIn(proxy, monitor)
+        self.assertIn("iframe", monitor)
+        self.assertIn("EmbeddedConsole", monitor)
         self.assertIn("Perfa Agent API", monitor)
         self.assertIn("Jaeger 分布式链路追踪", monitor)
 

@@ -113,6 +113,19 @@ def _extract_server_identity(server: dict) -> tuple[str, str, str, str]:
     return server_id, server_ip, agent_id, agent_status
 
 
+def _select_iperf3_target(servers: list[dict], current_server_id: str = "") -> tuple[str, str]:
+    """
+    选择 iperf3 默认目标：
+    1. 若环境中存在另一台 online 服务器，优先选那台
+    2. 否则回落到当前服务器本机回环地址，并启用自动 server
+    """
+    for server in servers:
+        server_id, server_ip, _, agent_status = _extract_server_identity(server)
+        if server_id and server_id != current_server_id and agent_status == "online" and server_ip:
+            return server_ip, server_id
+    return "127.0.0.1", current_server_id
+
+
 def make_node(fn: Callable, **kwargs) -> Callable:
     """
     节点工厂函数
@@ -240,6 +253,11 @@ async def check_environment(state: WorkflowState, *, tools: dict = None) -> dict
                     updates["server_ip"] = server_ip
                 updates["agent_id"] = agent_id
                 updates["agent_status"] = agent_status
+                iperf3_target_host, iperf3_target_server_id = _select_iperf3_target(
+                    servers, server_id
+                )
+                updates["iperf3_target_host"] = iperf3_target_host
+                updates["iperf3_target_server_id"] = iperf3_target_server_id
                 
                 # OTel: 记录服务器选择决策
                 if _current_span and _current_span.is_recording():
@@ -597,6 +615,13 @@ async def run_benchmark(state: WorkflowState, *, test_name: str, test_params: di
             "superpi": 900,
             "mlc": 900,
             "hping3": 300,
+            "sysbench_cpu": 300,
+            "sysbench_memory": 300,
+            "sysbench_threads": 300,
+            "openssl_speed": 180,
+            "stress_ng": 300,
+            "iperf3": 300,
+            "7z_b": 300,
         }
         max_wait = max_wait_by_test.get(test_name, 600)
         poll_interval = 5

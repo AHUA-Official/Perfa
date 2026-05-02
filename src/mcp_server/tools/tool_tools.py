@@ -4,12 +4,24 @@ from .base import BaseTool
 from storage import Database
 from agent_client import AgentClient
 
+TOOL_ENUM = [
+    "unixbench", "stream", "superpi", "mlc", "fio", "hping3",
+    "sysbench", "openssl_speed", "stress_ng", "iperf3", "7z_b",
+]
+
+CATEGORY_MAP = {
+    "cpu": ["unixbench", "superpi", "sysbench", "openssl_speed", "stress_ng", "7z_b"],
+    "mem": ["stream", "mlc"],
+    "disk": ["fio"],
+    "network": ["hping3", "iperf3"],
+}
+
 
 class InstallToolTool(BaseTool):
     """安装压测工具"""
     
     name = "install_tool"
-    description = "在目标服务器的 Agent 上安装压测工具（unixbench, stream, superpi, mlc, fio, hping3）"
+    description = "在目标服务器的 Agent 上安装压测工具（含短时 benchmark 工具）"
     input_schema = {
         "type": "object",
         "properties": {
@@ -20,7 +32,7 @@ class InstallToolTool(BaseTool):
             "tool_name": {
                 "type": "string",
                 "description": "工具名称",
-                "enum": ["unixbench", "stream", "superpi", "mlc", "fio", "hping3"]
+                "enum": TOOL_ENUM
             }
         },
         "required": ["server_id", "tool_name"]
@@ -92,7 +104,7 @@ class UninstallToolTool(BaseTool):
             "tool_name": {
                 "type": "string",
                 "description": "工具名称",
-                "enum": ["unixbench", "stream", "superpi", "mlc", "fio", "hping3"]
+                "enum": TOOL_ENUM
             }
         },
         "required": ["server_id", "tool_name"]
@@ -178,13 +190,7 @@ class ListToolsTool(BaseTool):
             
             # 按类别筛选
             if category:
-                category_map = {
-                    "cpu": ["unixbench", "superpi"],
-                    "mem": ["stream", "mlc"],
-                    "disk": ["fio"],
-                    "network": ["hping3"]
-                }
-                tools = [t for t in tools if t.get("name") in category_map.get(category, [])]
+                tools = [t for t in tools if t.get("name") in CATEGORY_MAP.get(category, [])]
             
             return {
                 "success": True,
@@ -212,7 +218,7 @@ class VerifyToolTool(BaseTool):
             "tool_name": {
                 "type": "string",
                 "description": "工具名称",
-                "enum": ["unixbench", "stream", "superpi", "mlc", "fio", "hping3"]
+                "enum": TOOL_ENUM
             }
         },
         "required": ["server_id", "tool_name"]

@@ -249,6 +249,45 @@ class GenerateReportTool(BaseTool):
                 "max_rtt_ms": results.get("max_rtt_ms"),
                 "packet_loss_percent": results.get("packet_loss_percent")
             }
+        elif test_name == "sysbench_cpu":
+            summary = {
+                "events_per_sec": results.get("events_per_sec"),
+                "latency_95th_ms": results.get("latency_95th_ms"),
+                "total_time_sec": results.get("total_time_sec"),
+            }
+        elif test_name == "sysbench_memory":
+            summary = {
+                "throughput_mib_s": results.get("throughput_mib_s"),
+                "operations": results.get("operations"),
+            }
+        elif test_name == "sysbench_threads":
+            summary = {
+                "events_per_sec": results.get("events_per_sec"),
+                "events_avg": results.get("events_avg"),
+                "events_stddev": results.get("events_stddev"),
+            }
+        elif test_name == "openssl_speed":
+            summary = {
+                "algorithm": results.get("algorithm"),
+                "summary_line": results.get("summary_line"),
+            }
+        elif test_name == "stress_ng":
+            summary = {
+                "stressor": results.get("stressor"),
+                "bogo_ops": results.get("bogo_ops"),
+                "bogo_ops_per_sec": results.get("bogo_ops_per_sec"),
+            }
+        elif test_name == "iperf3":
+            summary = {
+                "sent_mbps": results.get("sent_mbps"),
+                "received_mbps": results.get("received_mbps"),
+                "retransmits": results.get("retransmits"),
+            }
+        elif test_name == "7z_b":
+            summary = {
+                "rating_mips": results.get("rating_mips"),
+                "cpu_freq_mhz": results.get("cpu_freq_mhz"),
+            }
         
         return summary
     
@@ -293,6 +332,29 @@ class GenerateReportTool(BaseTool):
                 analysis["performance_level"] = "fair"
             if lat > 1000:
                 analysis["bottlenecks"].append("High I/O latency detected")
+        elif test_name == "sysbench_cpu":
+            eps = results.get("events_per_sec", 0) or 0
+            analysis["performance_level"] = "excellent" if eps > 2000 else "good" if eps > 800 else "fair"
+            analysis["notes"].append(f"events/s: {eps}")
+        elif test_name == "sysbench_memory":
+            throughput = results.get("throughput_mib_s", 0) or 0
+            analysis["performance_level"] = "excellent" if throughput > 20000 else "good" if throughput > 8000 else "fair"
+            analysis["notes"].append(f"memory throughput: {throughput} MiB/s")
+        elif test_name == "sysbench_threads":
+            eps = results.get("events_per_sec", 0) or 0
+            analysis["performance_level"] = "excellent" if eps > 10000 else "good" if eps > 3000 else "fair"
+        elif test_name == "openssl_speed":
+            analysis["performance_level"] = "good"
+            analysis["notes"].append(results.get("summary_line") or "openssl speed completed")
+        elif test_name == "stress_ng":
+            bogo = results.get("bogo_ops_per_sec", 0) or 0
+            analysis["performance_level"] = "excellent" if bogo > 5000 else "good" if bogo > 1000 else "fair"
+        elif test_name == "iperf3":
+            recv = results.get("received_mbps", 0) or 0
+            analysis["performance_level"] = "excellent" if recv > 5000 else "good" if recv > 1000 else "fair"
+        elif test_name == "7z_b":
+            rating = results.get("rating_mips", 0) or 0
+            analysis["performance_level"] = "excellent" if rating > 50000 else "good" if rating > 15000 else "fair"
         
         return analysis
     
@@ -372,6 +434,12 @@ class GenerateReportTool(BaseTool):
                 scores.append(res.get("copy_bandwidth_gb_s", 0))
             elif test_name == "fio":
                 scores.append(res.get("read_iops", 0) + res.get("write_iops", 0))
+            elif test_name == "sysbench_cpu":
+                scores.append(res.get("events_per_sec", 0))
+            elif test_name == "sysbench_memory":
+                scores.append(res.get("throughput_mib_s", 0))
+            elif test_name == "iperf3":
+                scores.append(res.get("received_mbps", 0))
         
         if len(scores) >= 2:
             if scores[0] > scores[-1]:
@@ -451,6 +519,14 @@ class GenerateReportTool(BaseTool):
                 recommendations.append("Consider using SSDs or NVMe for better performance")
             if iops < 10000:
                 recommendations.append("Low IOPS - check if using rotational disks")
+        elif test_name == "sysbench_cpu":
+            recommendations.append("Use sysbench cpu for fast CPU regression checks before long UnixBench runs")
+        elif test_name == "sysbench_memory":
+            recommendations.append("Use sysbench memory as a short precheck before deeper Stream/MLC analysis")
+        elif test_name == "iperf3":
+            recommendations.append("Ensure iperf3 server is running on the peer node before throughput testing")
+        elif test_name == "openssl_speed":
+            recommendations.append("Compare OpenSSL speed across ciphers to validate CPU crypto acceleration")
         
         # 基于问题给出建议
         for issue in issues:

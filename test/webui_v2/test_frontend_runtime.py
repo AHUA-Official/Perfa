@@ -103,6 +103,39 @@ class WebUIRuntimeTestCase(unittest.TestCase):
         data = self.run_node(script)
         self.assertEqual(data["result"], [])
 
+    def test_api_exposes_trace_and_latest_report_helpers(self):
+        script = textwrap.dedent(
+            f"""
+            const calls = [];
+            global.fetch = async (url) => {{
+              calls.push(url);
+              if (url === "/api/v1/reports") {{
+                return {{ ok: true, json: async () => ({{ reports: [{{ id: "r1", server_id: "srv-1", created_at: "2026-05-02T10:00:00", status: "completed", type: "cpu_focus" }}] }}) }};
+              }}
+              if (url === "/api/v1/reports/r1") {{
+                return {{ ok: true, json: async () => ({{ id: "r1", server_id: "srv-1", created_at: "2026-05-02T10:00:00", status: "completed", type: "cpu_focus", summary: "ok" }}) }};
+              }}
+              if (url === "/api/jaeger/api/traces/trace-1") {{
+                return {{ ok: true, json: async () => ({{ data: [{{ spans: [{{ spanID: "s1", operationName: "run_fio", duration: 120000, tags: [{{ key: "error", value: false }}] }}] }}] }}) }};
+              }}
+              throw new Error("unexpected url " + url);
+            }};
+            const api = require({json.dumps(str(self.tmpdir / "lib" / "api.js"))});
+            (async () => {{
+              const report = await api.getLatestReport("srv-1");
+              const trace = await api.getTraceSummary("trace-1");
+              console.log(JSON.stringify({{ report, trace, calls }}));
+            }})().catch((err) => {{
+              console.error(err);
+              process.exit(1);
+            }});
+            """
+        )
+        data = self.run_node(script)
+        self.assertEqual(data["report"]["id"], "r1")
+        self.assertEqual(data["trace"]["trace_id"], "trace-1")
+        self.assertEqual(data["trace"]["span_count"], 1)
+
     def test_sse_parser_extracts_metadata_and_workflow(self):
         block = """data: {"choices":[{"delta":{},"index":0}],"metadata":{"type":"workflow_progress","current_node":"run_fio","status":"running","scenario":"storage_focus"},"session_id":"session-1","conversation_id":"conversation-1","trace_id":"trace-1","jaeger_url":"/api/jaeger/trace/trace-1","workflow":{"scenario":"storage_focus","node_statuses":{"run_fio":"running"},"completed_nodes":[],"current_node":"run_fio"}}"""
         script = textwrap.dedent(

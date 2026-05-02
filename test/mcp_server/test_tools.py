@@ -14,7 +14,7 @@ sys.path.insert(0, str(MCP_DIR))
 from mcp_server.storage.database import Database
 from mcp_server.storage.models import Server
 from mcp_server.tools.benchmark_tools import RunBenchmarkTool
-from mcp_server.tools.tool_tools import InstallToolTool
+from mcp_server.tools.tool_tools import InstallToolTool, ListToolsTool
 
 
 class MCPToolTests(unittest.TestCase):
@@ -77,6 +77,26 @@ class MCPToolTests(unittest.TestCase):
             }
         )
         mock_client.run_benchmark.assert_called_once_with("fio", {"rw": "randread"})
+
+    def test_new_short_benchmarks_are_exposed_in_schemas(self):
+        run_tool = RunBenchmarkTool(self.db)
+        install_tool = InstallToolTool(self.db)
+        list_tool = ListToolsTool(self.db)
+
+        benchmark_enum = run_tool.input_schema["properties"]["test_name"]["enum"]
+        tool_enum = install_tool.input_schema["properties"]["tool_name"]["enum"]
+        categories = list_tool.input_schema["properties"]["category"]["enum"]
+
+        self.assertIn("sysbench_cpu", benchmark_enum)
+        self.assertIn("sysbench_memory", benchmark_enum)
+        self.assertIn("sysbench_threads", benchmark_enum)
+        self.assertIn("openssl_speed", benchmark_enum)
+        self.assertIn("stress_ng", benchmark_enum)
+        self.assertIn("iperf3", benchmark_enum)
+        self.assertIn("7z_b", benchmark_enum)
+        self.assertIn("sysbench", tool_enum)
+        self.assertIn("iperf3", tool_enum)
+        self.assertIn("network", categories)
 
 
 if __name__ == "__main__":

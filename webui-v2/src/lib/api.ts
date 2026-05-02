@@ -55,6 +55,31 @@ export interface ReportInfo {
   summary?: string;
 }
 
+export interface ReportDetail {
+  id: string;
+  type: string;
+  server_id: string;
+  created_at: string;
+  status: string;
+  summary?: string;
+  content?: any;
+  charts?: any;
+}
+
+export interface TraceSummary {
+  trace_id: string;
+  span_count: number;
+  error_count: number;
+  spans: Array<{
+    id: string;
+    operation: string;
+    service?: string;
+    duration_ms: number;
+    status: 'ok' | 'error';
+    tags: Record<string, any>;
+  }>;
+}
+
 export interface SessionSummary {
   session_id: string;
   title: string;
@@ -172,10 +197,45 @@ export async function listReports(): Promise<ReportInfo[]> {
 }
 
 /** 获取报告详情 */
-export async function getReport(id: string): Promise<any> {
+export async function getReport(id: string): Promise<ReportDetail> {
   const res = await fetch(`${API_BASE}/v1/reports/${id}`);
   if (!res.ok) throw new Error(`Report not found: ${id}`);
   return res.json();
+}
+
+export async function getLatestReport(serverId?: string): Promise<ReportDetail | null> {
+  const reports = await listReports();
+  const filtered = serverId ? reports.filter((report) => report.server_id === serverId) : reports;
+  const latest = filtered
+    .slice()
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+  if (!latest) return null;
+  return getReport(latest.id);
+}
+
+export async function getTraceSummary(traceId: string): Promise<TraceSummary> {
+  const res = await fetch(`${API_BASE}/jaeger/api/traces/${traceId}`);
+  if (!res.ok) throw new Error(`Trace not found: ${traceId}`);
+  const data = await res.json();
+  const trace = data.data?.[0];
+  const spans = (trace?.spans || []).map((span: any) => {
+    const tags = Object.fromEntries((span.tags || []).map((tag: any) => [tag.key, tag.value]));
+    return {
+      id: span.spanID,
+      operation: span.operationName,
+      service: span.process?.serviceName,
+      duration_ms: Math.round((span.duration || 0) / 1000),
+      status: tags.error ? 'error' : 'ok',
+      tags,
+    };
+  });
+
+  return {
+    trace_id: traceId,
+    span_count: spans.length,
+    error_count: spans.filter((span: any) => span.status === 'error').length,
+    spans,
+  };
 }
 
 /** 获取真实会话列表 */

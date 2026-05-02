@@ -5,9 +5,10 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Message, ProcessEvent } from '@/store/useChatStore';
-import { UserOutlined, RobotOutlined, LinkOutlined, ClockCircleOutlined, ToolOutlined, ThunderboltOutlined, DownOutlined, RightOutlined } from '@ant-design/icons';
+import { UserOutlined, RobotOutlined, LinkOutlined, ClockCircleOutlined, ToolOutlined, ThunderboltOutlined, DownOutlined, RightOutlined, FileSearchOutlined, NodeIndexOutlined } from '@ant-design/icons';
 import { Button, Tag, Tooltip } from 'antd';
 import { useState } from 'react';
+import ResultCard from './ResultCard';
 
 interface Props {
   message: Message;
@@ -58,6 +59,7 @@ function EventItem({ event }: { event: ProcessEvent }) {
 export default function ChatMessage({ message }: Props) {
   const isUser = message.role === 'user';
   const [processExpanded, setProcessExpanded] = useState(false);
+  const [insightExpanded, setInsightExpanded] = useState(false);
 
   // 过程事件（不含 answer_start/answer_done）
   const processEvents = message.events.filter(
@@ -66,6 +68,7 @@ export default function ChatMessage({ message }: Props) {
 
   // 是否有可展示的过程
   const hasProcess = processEvents.length > 0;
+  const hasInsights = !!(message.workflowStatus || message.traceSummary || message.report);
 
   return (
     <div className={`message-bubble ${isUser ? 'message-user' : 'message-assistant'}`}>
@@ -139,6 +142,107 @@ export default function ChatMessage({ message }: Props) {
                 )}
               </div>
 
+              {hasInsights && (
+                <div className="mt-3 rounded-2xl border border-white/8 bg-black/10 px-3 py-3">
+                  <button
+                    className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors"
+                    onClick={() => setInsightExpanded(!insightExpanded)}
+                  >
+                    {insightExpanded ? <DownOutlined style={{ fontSize: 10 }} /> : <RightOutlined style={{ fontSize: 10 }} />}
+                    <NodeIndexOutlined style={{ fontSize: 10 }} />
+                    <span>会话联动视图</span>
+                  </button>
+
+                  {insightExpanded && (
+                    <div className="mt-3 grid grid-cols-1 xl:grid-cols-3 gap-3">
+                      {message.workflowStatus && (
+                        <ResultCard
+                          title="Workflow"
+                          data={{
+                            scenario: message.workflowStatus.scenario,
+                            current_node: message.workflowStatus.current_node || '—',
+                            completed_nodes: message.workflowStatus.completed_nodes.length,
+                          }}
+                        >
+                          <div className="space-y-2 text-xs">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Tag color="blue">{message.workflowStatus.scenario}</Tag>
+                              <Tag color="gold">当前节点: {message.workflowStatus.current_node || '—'}</Tag>
+                            </div>
+                            <div className="space-y-1">
+                              {Object.entries(message.workflowStatus.node_statuses).map(([node, status]) => (
+                                <div key={node} className="flex items-center justify-between rounded-lg bg-white/5 px-2 py-1">
+                                  <span className="text-text-secondary">{node}</span>
+                                  <Tag color={status === 'completed' ? 'green' : status === 'failed' ? 'red' : 'blue'} className="!m-0">
+                                    {status}
+                                  </Tag>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </ResultCard>
+                      )}
+
+                      {message.traceSummary && (
+                        <ResultCard
+                          title="Trace"
+                          data={{
+                            trace_id: message.traceSummary.trace_id,
+                            span_count: message.traceSummary.span_count,
+                            error_count: message.traceSummary.error_count,
+                          }}
+                        >
+                          <div className="space-y-2 text-xs">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Tag color="cyan">{message.traceSummary.span_count} spans</Tag>
+                              <Tag color={message.traceSummary.error_count > 0 ? 'red' : 'green'}>
+                                {message.traceSummary.error_count > 0 ? `${message.traceSummary.error_count} error` : 'clean'}
+                              </Tag>
+                            </div>
+                            <div className="space-y-1">
+                              {message.traceSummary.spans.slice(0, 4).map((span) => (
+                                <div key={span.id} className="rounded-lg bg-white/5 px-2 py-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-text-primary truncate">{span.operation}</span>
+                                    <span className="text-text-muted">{span.duration_ms}ms</span>
+                                  </div>
+                                  {span.service && (
+                                    <div className="text-text-muted mt-0.5 truncate">{span.service}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </ResultCard>
+                      )}
+
+                      {message.report && (
+                        <ResultCard
+                          title="Report"
+                          data={{
+                            type: message.report.type,
+                            status: message.report.status,
+                            created_at: message.report.created_at,
+                          }}
+                        >
+                          <div className="space-y-2 text-xs">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Tag color="purple">{message.report.type}</Tag>
+                              <Tag color={message.report.status === 'completed' ? 'green' : 'blue'}>
+                                {message.report.status}
+                              </Tag>
+                            </div>
+                            <div className="text-text-secondary line-clamp-4">
+                              {message.report.summary || '这次响应关联的最新报告暂无摘要。'}
+                            </div>
+                          </div>
+                        </ResultCard>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* 底部元信息 */}
               {!message.isStreaming && (message.jaegerUrl || message.summary) && (
                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5 flex-wrap">
@@ -171,6 +275,11 @@ export default function ChatMessage({ message }: Props) {
                         Trace
                       </Button>
                     </Tooltip>
+                  )}
+                  {message.report && (
+                    <Tag color="purple" className="!text-[10px] !px-1 !py-0 !m-0">
+                      <FileSearchOutlined /> 报告已联动
+                    </Tag>
                   )}
                   {message.workflowStatus && (
                     <Tag color="blue" className="!text-[10px] !px-1 !py-0 !m-0">

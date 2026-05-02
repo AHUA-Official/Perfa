@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 /** 过程事件（与 SSE ProcessEvent 对应） */
 export interface ProcessEvent {
@@ -41,6 +42,28 @@ export interface Message {
   isStreaming?: boolean;
   traceId?: string;
   jaegerUrl?: string;
+  serverId?: string;
+  report?: {
+    id: string;
+    type: string;
+    status: string;
+    created_at: string;
+    summary?: string;
+    content?: any;
+  } | null;
+  traceSummary?: {
+    trace_id: string;
+    span_count: number;
+    error_count: number;
+    spans: Array<{
+      id: string;
+      operation: string;
+      service?: string;
+      duration_ms: number;
+      status: 'ok' | 'error';
+      tags: Record<string, any>;
+    }>;
+  } | null;
 }
 
 export interface ChatSession {
@@ -79,6 +102,15 @@ function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const memoryStorage = {
+  length: 0,
+  clear: () => undefined,
+  getItem: () => null,
+  key: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};
+
 function upsertSession(
   sessions: ChatSession[],
   sessionId: string,
@@ -95,7 +127,7 @@ function upsertSession(
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(persist((set, get) => ({
   sessions: [],
   activeSessionId: null,
   messages: [],
@@ -228,4 +260,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setLoading: (loading) => set({ isLoading: loading }),
   setSessionsLoading: (loading) => set({ sessionsLoading: loading }),
+}), {
+  name: 'perfa-chat-store',
+  storage: createJSONStorage(() =>
+    typeof window !== 'undefined' ? localStorage : memoryStorage
+  ),
+  partialize: (state) => ({
+    sessions: state.sessions,
+    activeSessionId: state.activeSessionId,
+    messages: state.messages,
+    sessionId: state.sessionId,
+    conversationId: state.conversationId,
+  }),
 }));

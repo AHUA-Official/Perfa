@@ -25,6 +25,8 @@ interface RegisterFormValues {
   ssh_user: string;
   ssh_password?: string;
   ssh_key_path?: string;
+  privilege_mode?: 'root' | 'sudo_nopasswd' | 'sudo_password' | 'none';
+  sudo_password?: string;
   alias?: string;
   tags?: string[];
 }
@@ -408,7 +410,7 @@ export default function ServersPage() {
           form={form}
           layout="vertical"
           onFinish={handleRegister}
-          initialValues={{ port: 22 }}
+          initialValues={{ port: 22, privilege_mode: 'root' }}
           className="mt-4"
         >
           <div className="grid grid-cols-2 gap-4">
@@ -438,6 +440,30 @@ export default function ServersPage() {
             </Form.Item>
             <Form.Item name="ssh_key_path" label="SSH 密钥路径" extra="如 ~/.ssh/id_rsa">
               <Input placeholder="可选" />
+            </Form.Item>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item name="privilege_mode" label="提权模式">
+              <Select
+                options={[
+                  { label: 'root', value: 'root' },
+                  { label: 'sudo 免密', value: 'sudo_nopasswd' },
+                  { label: 'sudo 密码', value: 'sudo_password' },
+                  { label: '无提权', value: 'none' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item shouldUpdate noStyle>
+              {({ getFieldValue }) =>
+                getFieldValue('privilege_mode') === 'sudo_password' ? (
+                  <Form.Item name="sudo_password" label="sudo 密码">
+                    <Input.Password placeholder="用于 sudo 提权" />
+                  </Form.Item>
+                ) : (
+                  <div />
+                )
+              }
             </Form.Item>
           </div>
 

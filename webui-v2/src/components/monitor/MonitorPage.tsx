@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { Tabs, Typography, Card, Tag, Space, Badge, Button, List, Empty, Tooltip, Descriptions, message } from 'antd';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Tabs, Typography, Card, Tag, Space, Badge, Button, List, Empty, Input } from 'antd';
 import {
   EyeOutlined,
   CheckCircleOutlined,
@@ -15,6 +15,7 @@ import {
   DatabaseOutlined,
   DashboardOutlined,
   ReloadOutlined,
+  ExpandOutlined,
 } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
@@ -22,8 +23,8 @@ const { Text, Title } = Typography;
 /** 所有服务统一配置 — 有代理走代理，没有的只显示端口信息 */
 const ALL_SERVICES = [
   { name: 'Perfa Agent API', category: '核心服务', icon: <RobotOutlined />, proxyUrl: '/api/v1/models', port: 10000, desc: 'LangChain Agent + OpenAI 兼容 API', color: '#00D9A6' },
-  { name: 'MCP Server', category: '核心服务', icon: <ApiOutlined />, proxyUrl: null, port: 18080, desc: 'MCP 工具服务（SSH 管理）', color: '#4285F4' },
-  { name: 'Node Agent', category: '核心服务', icon: <CloudServerOutlined />, proxyUrl: null, port: 5000, desc: '节点 Agent（压测执行）', color: '#FBBC04' },
+  { name: 'MCP Server', category: '核心服务', icon: <ApiOutlined />, proxyUrl: null, port: 9000, desc: 'MCP 工具服务（SSE + SSH 管理）', color: '#4285F4' },
+  { name: 'Node Agent', category: '核心服务', icon: <CloudServerOutlined />, proxyUrl: null, port: 8080, desc: '节点 Agent（压测执行）', color: '#FBBC04' },
   { name: 'WebUI V2', category: '核心服务', icon: <DashboardOutlined />, proxyUrl: null, port: 3002, desc: '前端界面（Next.js）', color: '#34A853' },
   { name: 'OTel Collector', category: '可观测性', icon: <EyeOutlined />, proxyUrl: null, port: 4317, desc: 'OpenTelemetry 数据采集', color: '#FF6D00' },
   { name: 'Jaeger UI', category: '可观测性', icon: <SearchOutlined />, proxyUrl: '/api/jaeger', port: 16686, desc: '分布式链路追踪', color: '#66BCFF' },
@@ -47,12 +48,64 @@ interface TraceDetail {
   spans: TraceSpan[];
 }
 
+function EmbeddedConsole({
+  title,
+  description,
+  src,
+  externalHref,
+}: {
+  title: string;
+  description: string;
+  src: string;
+  externalHref?: string;
+}) {
+  const [frameKey, setFrameKey] = useState(0);
+  const href = externalHref || src;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium text-text-primary">{title}</div>
+          <div className="text-xs text-text-muted">{description}</div>
+        </div>
+        <Space>
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            onClick={() => setFrameKey((value) => value + 1)}
+          >
+            刷新面板
+          </Button>
+          <Button
+            size="small"
+            icon={<ExpandOutlined />}
+            onClick={() => window.open(href, '_blank', 'noopener,noreferrer')}
+          >
+            新标签打开
+          </Button>
+        </Space>
+      </div>
+
+      <div className="rounded-2xl overflow-hidden border border-white/8 bg-black/20 shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
+        <iframe
+          key={frameKey}
+          src={src}
+          title={title}
+          className="w-full h-[calc(100vh-290px)] min-h-[640px] bg-white"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function MonitorPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [traceSearchLoading, setTraceSearchLoading] = useState(false);
   const [traces, setTraces] = useState<TraceDetail[]>([]);
   const [searchError, setSearchError] = useState('');
   const [serviceStatus, setServiceStatus] = useState<Record<string, 'checking' | 'online' | 'offline'>>({});
+  const [traceQuery, setTraceQuery] = useState('');
 
   // 检测服务状态
   const checkServices = useCallback(async () => {
@@ -145,11 +198,21 @@ export default function MonitorPage() {
     }
   }, []);
 
+  const serviceCounts = useMemo(() => {
+    const values = Object.values(serviceStatus);
+    return {
+      online: values.filter((value) => value === 'online').length,
+      offline: values.filter((value) => value === 'offline').length,
+    };
+  }, [serviceStatus]);
+
   const openService = (svc: typeof ALL_SERVICES[0]) => {
     if (svc.proxyUrl) {
       window.open(svc.proxyUrl, '_blank');
     }
-    // 没有代理的服务不自动跳转，只显示端口信息
+    if (svc.name === 'Node Agent') {
+      window.open('http://127.0.0.1:8080/health', '_blank');
+    }
   };
 
   const tabs = [
@@ -164,10 +227,14 @@ export default function MonitorPage() {
       children: (
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2">
-            <Text className="!text-text-secondary">所有服务的运行状态和入口</Text>
-            <Button size="small" icon={<ReloadOutlined />} onClick={checkServices} className="!text-text-muted">
-              刷新状态
-            </Button>
+            <div>
+              <Text className="!text-text-secondary block">所有服务的运行状态和入口</Text>
+              <div className="mt-1 flex items-center gap-2">
+                <Tag color="green">{serviceCounts.online} 在线</Tag>
+                <Tag color={serviceCounts.offline > 0 ? 'red' : 'default'}>{serviceCounts.offline} 离线</Tag>
+              </div>
+            </div>
+            <Button size="small" icon={<ReloadOutlined />} onClick={checkServices} className="!text-text-muted">刷新状态</Button>
           </div>
           {['核心服务', '可观测性'].map((category) => (
             <div key={category}>
@@ -176,12 +243,13 @@ export default function MonitorPage() {
                 {ALL_SERVICES.filter(s => s.category === category).map((svc) => {
                   const status = serviceStatus[svc.name];
                   const hasProxy = !!svc.proxyUrl;
+                  const canOpen = hasProxy || svc.name === 'Node Agent';
                   return (
                     <Card
                       key={svc.name}
                       size="small"
-                      className={`!bg-bg-card !border-white/5 transition-colors ${hasProxy ? 'hover:!border-primary/30 cursor-pointer' : ''}`}
-                      onClick={() => hasProxy && openService(svc)}
+                      className={`!bg-bg-card !border-white/5 transition-colors ${canOpen ? 'hover:!border-primary/30 cursor-pointer' : ''}`}
+                      onClick={() => canOpen && openService(svc)}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -210,6 +278,9 @@ export default function MonitorPage() {
                             {hasProxy && (
                               <Tag color="cyan" className="!text-[9px] !px-1 !py-0 !m-0 !leading-none">代理</Tag>
                             )}
+                            {!hasProxy && (
+                              <Tag color="default" className="!text-[9px] !px-1 !py-0 !m-0 !leading-none">本地端口</Tag>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -231,29 +302,11 @@ export default function MonitorPage() {
         </span>
       ),
       children: (
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-240px)]">
-          <div className="text-center space-y-4">
-            <div className="text-5xl mb-4">🔍</div>
-            <Title level={4} className="!text-text-primary !mb-2">
-              Jaeger 分布式链路追踪
-            </Title>
-            <Text className="!text-text-secondary block mb-4">
-              查看完整的请求链路、AI 思考过程、工具调用详情
-            </Text>
-            <Button
-              type="primary"
-              size="large"
-              icon={<LinkOutlined />}
-              onClick={() => window.open('/api/jaeger', '_blank')}
-              className="!px-8 !h-12 !text-base"
-            >
-              打开 Jaeger UI
-            </Button>
-            <div className="text-text-muted text-xs mt-2">
-              通过 Next.js 代理访问，无需直接连 localhost
-            </div>
-          </div>
-        </div>
+        <EmbeddedConsole
+          title="Jaeger 分布式链路追踪"
+          description="直接在页面内查看 trace、span、工具调用和 AI 推理链路。"
+          src="/api/jaeger"
+        />
       ),
     },
     {
@@ -268,13 +321,20 @@ export default function MonitorPage() {
         <div className="space-y-4">
           <div className="flex gap-3 items-center">
             <Space>
+              <Input
+                allowClear
+                placeholder="输入 trace id 可直接打开"
+                value={traceQuery}
+                onChange={(event) => setTraceQuery(event.target.value)}
+                className="!w-[280px]"
+              />
               <Button
                 icon={<ThunderboltOutlined />}
-                onClick={() => searchTraces()}
+                onClick={() => searchTraces(traceQuery)}
                 loading={traceSearchLoading}
                 type="primary"
               >
-                查看最近 Traces
+                查询 Trace
               </Button>
             </Space>
           </div>
@@ -383,26 +443,11 @@ export default function MonitorPage() {
         </span>
       ),
       children: (
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-240px)]">
-          <div className="text-center space-y-4">
-            <div className="text-5xl mb-4">📊</div>
-            <Title level={4} className="!text-text-primary !mb-2">
-              Grafana 性能监控看板
-            </Title>
-            <Text className="!text-text-secondary block mb-4">
-              可视化展示性能指标、趋势图和告警
-            </Text>
-            <Button
-              type="primary"
-              size="large"
-              icon={<LinkOutlined />}
-              onClick={() => window.open('/api/grafana', '_blank')}
-              className="!px-8 !h-12 !text-base"
-            >
-              打开 Grafana
-            </Button>
-          </div>
-        </div>
+        <EmbeddedConsole
+          title="Grafana 性能监控看板"
+          description="在工作台里直接查看 dashboard、节点趋势、运行指标和告警上下文。"
+          src="/api/grafana"
+        />
       ),
     },
     {
@@ -414,26 +459,11 @@ export default function MonitorPage() {
         </span>
       ),
       children: (
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-240px)]">
-          <div className="text-center space-y-4">
-            <div className="text-5xl mb-4">📈</div>
-            <Title level={4} className="!text-text-primary !mb-2">
-              VictoriaMetrics 时序数据库
-            </Title>
-            <Text className="!text-text-secondary block mb-4">
-              高性能指标存储和查询引擎
-            </Text>
-            <Button
-              type="primary"
-              size="large"
-              icon={<LinkOutlined />}
-              onClick={() => window.open('/api/vm/vmui', '_blank')}
-              className="!px-8 !h-12 !text-base"
-            >
-              打开 VictoriaMetrics
-            </Button>
-          </div>
-        </div>
+        <EmbeddedConsole
+          title="VictoriaMetrics 指标查询"
+          description="直接在嵌入面板里做指标查询、验证抓取结果和对比时间序列。"
+          src="/api/vm/vmui"
+        />
       ),
     },
   ];

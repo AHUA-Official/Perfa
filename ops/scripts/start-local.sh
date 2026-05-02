@@ -42,7 +42,6 @@ setsid bash -lc "cd '$PROJECT_DIR/src' && export PYTHONPATH='$PROJECT_DIR/src':\
 wait_for_http "http://127.0.0.1:10000/health" "LangChain 后端"
 
 echo "[4/4] 启动 WebUI V2..."
-nohup bash "$SCRIPT_DIR/start-webui-v2.sh" >/tmp/perfa_webui.log 2>&1 &
-wait_for_http "http://127.0.0.1:3002" "WebUI V2" 30 HEAD
+bash "$SCRIPT_DIR/start-webui-v2.sh"
 
 echo "✅ 本地完整链路已启动"

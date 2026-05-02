@@ -7,7 +7,7 @@ import {
   DesktopOutlined
 } from '@ant-design/icons';
 import { useChatStore } from '@/store/useChatStore';
-import { listServers, listSessions, ServerInfo } from '@/lib/api';
+import { getLatestReport, getTraceSummary, listServers, listSessions, ServerInfo } from '@/lib/api';
 import { consumeSSEStream } from '@/lib/sse';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
@@ -27,7 +27,7 @@ export default function ChatPage() {
   const {
     messages, sessionId, conversationId, isLoading,
     addMessage, updateMessage, addEvent, setLoading,
-    setSessions, setSessionsLoading,
+    setSessions, setSessionsLoading, activeSessionId,
   } =
     useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -66,23 +66,24 @@ export default function ChatPage() {
     setSessionsLoading(true);
     try {
       const sessions = await listSessions();
-      setSessions(
-        sessions.map((session) => ({
+      const mappedSessions = sessions.map((session) => ({
           id: session.session_id,
           title: session.title || '新对话',
           createdAt: session.created_at ? new Date(session.created_at).getTime() : Date.now(),
           updatedAt: session.last_active ? new Date(session.last_active).getTime() : Date.now(),
           lastUserMessage: session.last_user_message,
-        }))
-      );
+        }));
+      setSessions(mappedSessions);
     } finally {
       setSessionsLoading(false);
     }
   }, [setSessions, setSessionsLoading]);
 
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    if (!activeSessionId) {
+      void loadSessions();
+    }
+  }, [activeSessionId, loadSessions]);
 
   // 停止生成
   const handleStop = useCallback(() => {
@@ -125,6 +126,9 @@ export default function ChatPage() {
         const history = currentState.messages
           .filter((m) => !m.isStreaming)
           .map((m) => ({ role: m.role, content: m.content }));
+        const currentServer =
+          servers.find((server) => server.server_id === selectedServer) ||
+          servers.find((server) => server.status === 'online');
 
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api';
         const res = await fetch(`${API_BASE}/v1/chat/completions`, {
@@ -169,6 +173,7 @@ export default function ChatPage() {
               updateMessage(assistantId, {
                 content: fullContent,
                 isStreaming: true,
+                serverId: currentServer?.server_id,
               });
             }
             // ---- 过程事件通道：metadata 事件进入 events 列表 ----
@@ -190,7 +195,7 @@ export default function ChatPage() {
             }
             if (chunk.workflow) {
               workflowStatus = chunk.workflow;
-              updateMessage(assistantId, { workflowStatus });
+              updateMessage(assistantId, { workflowStatus, serverId: currentServer?.server_id });
             }
             if (chunk.trace_id) {
               traceId = chunk.trace_id;
@@ -208,9 +213,33 @@ export default function ChatPage() {
               workflowStatus: workflowStatus || undefined,
               traceId,
               jaegerUrl,
+              serverId: currentServer?.server_id,
             });
           }
         );
+
+        const enrichTasks: Promise<void>[] = [];
+        if (traceId) {
+          enrichTasks.push(
+            getTraceSummary(traceId)
+              .then((traceSummary) => {
+                updateMessage(assistantId, { traceSummary });
+              })
+              .catch(() => undefined)
+          );
+        }
+        if (currentServer?.server_id) {
+          enrichTasks.push(
+            getLatestReport(currentServer.server_id)
+              .then((report) => {
+                if (report) {
+                  updateMessage(assistantId, { report });
+                }
+              })
+              .catch(() => undefined)
+          );
+        }
+        await Promise.all(enrichTasks);
       } catch (err: any) {
         if (err.name === 'AbortError') {
           // 用户主动停止

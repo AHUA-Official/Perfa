@@ -17,5 +17,5 @@ if [ -f "$MCP_PID_FILE" ]; then
 fi
 pkill -f "$PROJECT_DIR/src/mcp_server/main.py" 2>/dev/null || true
 pkill -f "python3 main.py" 2>/dev/null || true
-pkill -f "next dev" 2>/dev/null || true
+bash "$SCRIPT_DIR/stop-webui-v2.sh"
 bash "$SCRIPT_DIR/stop-local-infra.sh"

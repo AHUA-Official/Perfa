@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Layout, Menu, Button, Typography, Popconfirm, Tooltip } from 'antd';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Layout, Menu, Button, Typography, Popconfirm, Tooltip, Skeleton, Input, Tag } from 'antd';
 import {
   MessageOutlined,
   DesktopOutlined,
@@ -34,11 +34,17 @@ const menuItems = [
 export default function HomePage() {
   const [currentPage, setCurrentPage] = useState<PageKey>('chat');
   const [collapsed, setCollapsed] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [sessionQuery, setSessionQuery] = useState('');
   const {
     createSession, clearMessages, sessions, activeSessionId,
     switchSession, replaceMessages, setSessions, removeSession,
     sessionsLoading, setSessionsLoading
   } = useChatStore();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleNewChat = useCallback(() => {
     createSession();
@@ -58,7 +64,15 @@ export default function HomePage() {
     }
   };
 
-  const recentChats = sessions.slice(0, 8);
+  const recentChats = useMemo(() => {
+    const query = sessionQuery.trim().toLowerCase();
+    const base = query
+      ? sessions.filter((session) =>
+          `${session.title} ${session.lastUserMessage || ''}`.toLowerCase().includes(query)
+        )
+      : sessions;
+    return base.slice(0, 8);
+  }, [sessionQuery, sessions]);
 
   const loadSessionList = useCallback(async () => {
     setSessionsLoading(true);
@@ -110,7 +124,7 @@ export default function HomePage() {
   }, [activeSessionId, clearMessages, loadSessionList, removeSession]);
 
   return (
-    <Layout className="min-h-screen">
+    <Layout hasSider className="min-h-screen app-shell">
       <Sider
         collapsible
         collapsed={collapsed}
@@ -144,6 +158,17 @@ export default function HomePage() {
             <div className="mt-auto px-4 py-3 border-t border-white/5">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-xs text-text-muted">对话历史</div>
+                <Tag color="gold" className="!m-0 !text-[10px]">{sessions.length}</Tag>
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <Input
+                  size="small"
+                  allowClear
+                  value={sessionQuery}
+                  onChange={(e) => setSessionQuery(e.target.value)}
+                  placeholder="搜索会话"
+                  className="!bg-bg-main !border-white/10 !text-text-primary"
+                />
                 <Tooltip title="刷新会话列表">
                   <Button
                     type="text"
@@ -158,7 +183,7 @@ export default function HomePage() {
               <div className="space-y-1 max-h-32 overflow-y-auto">
                 {recentChats.length === 0 ? (
                   <div className="text-xs text-text-secondary px-2 py-1 truncate">
-                    暂无消息
+                    {sessionQuery ? '没有匹配会话' : '暂无消息'}
                   </div>
                 ) : (
                   recentChats.map((chat) => (
@@ -229,7 +254,13 @@ export default function HomePage() {
         </Header>
 
         <Content className="!bg-bg-main !m-0 overflow-hidden">
-          {renderPage()}
+          {mounted ? (
+            renderPage()
+          ) : (
+            <div className="p-6">
+              <Skeleton active paragraph={{ rows: 8 }} />
+            </div>
+          )}
         </Content>
       </Layout>
     </Layout>

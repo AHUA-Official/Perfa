@@ -5,6 +5,12 @@ from .base import BaseTool
 from storage import Database
 from agent_client import AgentClient
 
+BENCHMARK_ENUM = [
+    "unixbench", "stream", "fio", "superpi", "mlc", "hping3",
+    "sysbench_cpu", "sysbench_memory", "sysbench_threads",
+    "openssl_speed", "stress_ng", "iperf3", "7z_b",
+]
+
 
 class RunBenchmarkTool(BaseTool):
     """执行压测任务"""
@@ -19,6 +25,13 @@ class RunBenchmarkTool(BaseTool):
 - superpi: CPU浮点测试，参数：{digits: 1048576}
 - mlc: Intel内存延迟测试，参数：{}
 - hping3: 网络测试，参数：{target: "192.168.1.1", count: 10, interval: 1}
+- sysbench_cpu: 快速 CPU 测试，参数：{time: 30, threads: 1, cpu_max_prime: 20000}
+- sysbench_memory: 快速内存吞吐测试，参数：{time: 20, threads: 1, block_size: "1M", operation: "read"}
+- sysbench_threads: 线程调度测试，参数：{time: 15, threads: 8, locks: 64, yield: 100}
+- openssl_speed: 加密性能测试，参数：{seconds: 10, algorithm: "aes-256-cbc"}
+- stress_ng: 快速压力测试，参数：{mode: "cpu", workers: 1, timeout: 30}
+- iperf3: 网络吞吐测试，参数：{host: "127.0.0.1", port: 5201, time: 10, parallel: 1}
+- 7z_b: 压缩性能测试，参数：{method: "lzma2", threads: 1, passes: 3}
 """
     input_schema = {
         "type": "object",
@@ -30,7 +43,7 @@ class RunBenchmarkTool(BaseTool):
             "test_name": {
                 "type": "string",
                 "description": "测试名称",
-                "enum": ["unixbench", "stream", "fio", "superpi", "mlc", "hping3"]
+                "enum": BENCHMARK_ENUM
             },
             "params": {
                 "type": "object",
@@ -101,6 +114,70 @@ class RunBenchmarkTool(BaseTool):
                     "interval": {
                         "type": "number",
                         "description": "[hping3] 发送间隔（秒）"
+                    },
+                    "time": {
+                        "type": "integer",
+                        "description": "[sysbench/iperf3] 运行时长（秒）"
+                    },
+                    "threads": {
+                        "type": "integer",
+                        "description": "[sysbench_* / 7z_b] 线程数"
+                    },
+                    "cpu_max_prime": {
+                        "type": "integer",
+                        "description": "[sysbench_cpu] 素数上限"
+                    },
+                    "block_size": {
+                        "type": "string",
+                        "description": "[sysbench_memory] 内存块大小"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "description": "[sysbench_memory] read/write"
+                    },
+                    "locks": {
+                        "type": "integer",
+                        "description": "[sysbench_threads] 锁数量"
+                    },
+                    "yield": {
+                        "type": "integer",
+                        "description": "[sysbench_threads] yield 次数"
+                    },
+                    "seconds": {
+                        "type": "integer",
+                        "description": "[openssl_speed] 运行秒数"
+                    },
+                    "algorithm": {
+                        "type": "string",
+                        "description": "[openssl_speed] 加密算法"
+                    },
+                    "mode": {
+                        "type": "string",
+                        "description": "[stress_ng/hping3] 测试模式"
+                    },
+                    "workers": {
+                        "type": "integer",
+                        "description": "[stress_ng] worker 数量"
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "[stress_ng] 超时秒数"
+                    },
+                    "host": {
+                        "type": "string",
+                        "description": "[iperf3] 服务端地址"
+                    },
+                    "parallel": {
+                        "type": "integer",
+                        "description": "[iperf3] 并发连接数"
+                    },
+                    "method": {
+                        "type": "string",
+                        "description": "[7z_b] 压缩算法"
+                    },
+                    "passes": {
+                        "type": "integer",
+                        "description": "[7z_b] 循环次数"
                     }
                 }
             }
@@ -355,7 +432,7 @@ class ListBenchmarkHistoryTool(BaseTool):
             "test_name": {
                 "type": "string",
                 "description": "按测试名称筛选（可选）",
-                "enum": ["unixbench", "stream", "fio", "superpi", "mlc", "hping3"]
+                "enum": BENCHMARK_ENUM
             },
             "limit": {
                 "type": "integer",

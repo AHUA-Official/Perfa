@@ -11,6 +11,7 @@ from .cpu_tools import UnixBenchTool, SuperPiTool
 from .mem_tools import StreamTool, MLCTool
 from .disk_tools import FioTool
 from .net_tools import Hping3Tool
+from .quick_tools import SysbenchTool, OpenSSLTool, StressNgTool, Iperf3Tool, SevenZipTool
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,10 @@ class ToolManager:
         # CPU测试工具
         self.tools["unixbench"] = UnixBenchTool()
         self.tools["superpi"] = SuperPiTool()
+        self.tools["sysbench"] = SysbenchTool()
+        self.tools["openssl_speed"] = OpenSSLTool()
+        self.tools["stress_ng"] = StressNgTool()
+        self.tools["7z_b"] = SevenZipTool()
         
         # 内存测试工具
         self.tools["stream"] = StreamTool()
@@ -39,6 +44,7 @@ class ToolManager:
         
         # 网络测试工具
         self.tools["hping3"] = Hping3Tool()
+        self.tools["iperf3"] = Iperf3Tool()
     
     def install_tool(self, tool_name: str) -> Dict:
         """

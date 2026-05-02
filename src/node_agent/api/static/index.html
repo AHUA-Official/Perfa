@@ -202,13 +202,20 @@
                                 <optgroup label="内存测试">
                                     <option value="stream">STREAM - 内存带宽测试</option>
                                     <option value="mlc" title="需要配置大页内存">MLC - 内存延迟和带宽测试 ⚠️</option>
+                                    <option value="sysbench_memory">sysbench memory - 快速内存吞吐测试</option>
                                 </optgroup>
                                 <optgroup label="CPU测试">
                                     <option value="unixbench">UnixBench - CPU综合性能测试</option>
                                     <option value="superpi">SuperPi - CPU浮点计算测试</option>
+                                    <option value="sysbench_cpu">sysbench cpu - 快速CPU测试</option>
+                                    <option value="sysbench_threads">sysbench threads - 线程调度测试</option>
+                                    <option value="openssl_speed">OpenSSL speed - 加密性能测试</option>
+                                    <option value="stress_ng">stress-ng - 快速压力指标测试</option>
+                                    <option value="7z_b">7z b - 压缩性能测试</option>
                                 </optgroup>
                                 <optgroup label="网络测试">
                                     <option value="hping3">hping3 - 网络探测和压力测试</option>
+                                    <option value="iperf3">iperf3 - 网络吞吐测试</option>
                                 </optgroup>
                             </select>
                         </div>
@@ -527,6 +534,15 @@
                     <div class="form-group"><label class="form-label">数组大小</label><input type="text" class="form-input" id="param-size" value="100M"></div>
                     <div class="form-group"><label class="form-label">运行次数</label><input type="number" class="form-input" id="param-ntimes" value="10"></div>
                 </div>`,
+            'sysbench_memory': `
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">运行时长(秒)</label><input type="number" class="form-input" id="param-time" value="20" min="5" max="240"></div>
+                    <div class="form-group"><label class="form-label">线程数</label><input type="number" class="form-input" id="param-threads" value="1" min="1"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">块大小</label><input type="text" class="form-input" id="param-block_size" value="1M"></div>
+                    <div class="form-group"><label class="form-label">操作</label><select class="form-select" id="param-operation"><option value="read">read</option><option value="write">write</option></select></div>
+                </div>`,
             'mlc': `
                 <div class="alert alert-warning" style="margin-bottom: 12px; font-size: 13px;">
                     ⚠️ MLC 需要配置大页内存，请先执行：<br>
@@ -540,6 +556,38 @@
                 </div>`,
             'superpi': `
                 <div class="form-group"><label class="form-label">计算位数</label><select class="form-select" id="param-digits"><option value="1000">1K 位</option><option value="10000">10K 位</option><option value="100000">100K 位</option><option value="1000000" selected>1M 位</option><option value="4000000">4M 位</option><option value="16000000">16M 位</option><option value="32000000">32M 位</option></select></div>`,
+            'sysbench_cpu': `
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">运行时长(秒)</label><input type="number" class="form-input" id="param-time" value="30" min="5" max="240"></div>
+                    <div class="form-group"><label class="form-label">线程数</label><input type="number" class="form-input" id="param-threads" value="1" min="1"></div>
+                </div>
+                <div class="form-group"><label class="form-label">cpu-max-prime</label><input type="number" class="form-input" id="param-cpu_max_prime" value="20000"></div>`,
+            'sysbench_threads': `
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">运行时长(秒)</label><input type="number" class="form-input" id="param-time" value="15" min="5" max="180"></div>
+                    <div class="form-group"><label class="form-label">线程数</label><input type="number" class="form-input" id="param-threads" value="8" min="1"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">锁数量</label><input type="number" class="form-input" id="param-locks" value="64" min="1"></div>
+                    <div class="form-group"><label class="form-label">yield 次数</label><input type="number" class="form-input" id="param-yield" value="100" min="1"></div>
+                </div>`,
+            'openssl_speed': `
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">运行时长(秒)</label><input type="number" class="form-input" id="param-seconds" value="10" min="3" max="120"></div>
+                    <div class="form-group"><label class="form-label">算法</label><input type="text" class="form-input" id="param-algorithm" value="aes-256-cbc"></div>
+                </div>`,
+            'stress_ng': `
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">模式</label><select class="form-select" id="param-mode"><option value="cpu">cpu</option><option value="vm">vm</option><option value="matrix">matrix</option><option value="cache">cache</option></select></div>
+                    <div class="form-group"><label class="form-label">worker 数</label><input type="number" class="form-input" id="param-workers" value="1" min="1"></div>
+                </div>
+                <div class="form-group"><label class="form-label">超时(秒)</label><input type="number" class="form-input" id="param-timeout" value="30" min="5" max="240"></div>`,
+            '7z_b': `
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">算法</label><input type="text" class="form-input" id="param-method" value="lzma2"></div>
+                    <div class="form-group"><label class="form-label">线程数</label><input type="number" class="form-input" id="param-threads" value="1" min="1"></div>
+                </div>
+                <div class="form-group"><label class="form-label">循环次数</label><input type="number" class="form-input" id="param-passes" value="3" min="1" max="10"></div>`,
             'hping3': `
                 <div class="form-row">
                     <div class="form-group"><label class="form-label">目标地址</label><input type="text" class="form-input" id="param-target" value="localhost" placeholder="IP或域名"></div>
@@ -548,6 +596,15 @@
                 <div class="form-row">
                     <div class="form-group"><label class="form-label">测试模式</label><select class="form-select" id="param-mode"><option value="ping">ICMP Ping</option><option value="syn">SYN扫描</option><option value="flood">SYN Flood (需root)</option></select></div>
                     <div class="form-group"><label class="form-label">数据包数量</label><input type="number" class="form-input" id="param-count" value="10"></div>
+                </div>`,
+            'iperf3': `
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">服务端地址</label><input type="text" class="form-input" id="param-host" value="127.0.0.1" placeholder="IP或域名"></div>
+                    <div class="form-group"><label class="form-label">端口</label><input type="number" class="form-input" id="param-port" value="5201"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">运行时长(秒)</label><input type="number" class="form-input" id="param-time" value="10" min="3" max="120"></div>
+                    <div class="form-group"><label class="form-label">并发连接数</label><input type="number" class="form-input" id="param-parallel" value="1" min="1" max="16"></div>
                 </div>`
         };
         

@@ -26,6 +26,8 @@ class WorkflowState(TypedDict, total=False):
     # ========== 执行上下文 ==========
     server_id: Optional[str]              # 目标服务器 ID
     server_ip: Optional[str]              # 目标服务器 IP
+    iperf3_target_host: Optional[str]     # iperf3 目标地址
+    iperf3_target_server_id: Optional[str]# iperf3 目标服务器 ID
     agent_id: Optional[str]               # Agent ID
     agent_status: Optional[str]           # Agent 运行状态
     available_tools: List[str]            # 已安装的工具列表
@@ -55,6 +57,8 @@ def create_initial_state(query: str, session_id: str, scenario: str) -> Workflow
         scenario=scenario,
         server_id=None,
         server_ip=None,
+        iperf3_target_host=None,
+        iperf3_target_server_id=None,
         agent_id=None,
         agent_status=None,
         available_tools=[],

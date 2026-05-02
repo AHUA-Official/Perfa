@@ -324,6 +324,14 @@ class BenchmarkExecutor:
             self.result_collector.collect(task, None)
             
         finally:
+            iperf3_server_pid = (task.params or {}).get("_iperf3_server_pid")
+            if iperf3_server_pid:
+                try:
+                    os.kill(iperf3_server_pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                except Exception as exc:
+                    logger.warning(f"Failed to stop iperf3 helper server {iperf3_server_pid}: {exc}")
             task.process = None
 
     def _cleanup_finished_current_task(self):
