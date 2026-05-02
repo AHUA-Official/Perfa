@@ -4,16 +4,68 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Message } from '@/store/useChatStore';
-import { UserOutlined, RobotOutlined, LinkOutlined } from '@ant-design/icons';
+import { Message, ProcessEvent } from '@/store/useChatStore';
+import { UserOutlined, RobotOutlined, LinkOutlined, ClockCircleOutlined, ToolOutlined, ThunderboltOutlined, DownOutlined, RightOutlined } from '@ant-design/icons';
 import { Button, Tag, Tooltip } from 'antd';
+import { useState } from 'react';
 
 interface Props {
   message: Message;
 }
 
+/** 过程事件时间线条目 */
+function EventItem({ event }: { event: ProcessEvent }) {
+  const icon = (() => {
+    switch (event.type) {
+      case 'thinking_start':
+        return <span className="text-blue-400">🔄</span>;
+      case 'thinking_result':
+        return event.is_final ? <span className="text-green-400">✅</span> : <span className="text-yellow-400">💭</span>;
+      case 'tool_result':
+        return event.success ? <span className="text-green-400">🔧</span> : <span className="text-red-400">❌</span>;
+      case 'workflow_progress':
+        return <span className="text-purple-400">📋</span>;
+      default:
+        return <span>•</span>;
+    }
+  })();
+
+  const text = (() => {
+    switch (event.type) {
+      case 'thinking_start':
+        return `第${event.iteration}轮思考中...`;
+      case 'thinking_result':
+        if (event.is_final) return '得到最终答案';
+        if (event.tool_name) return `调用工具: ${event.tool_name}`;
+        return '思考完成';
+      case 'tool_result':
+        return `${event.tool_name} — ${event.summary || ''} (${event.execution_time}s)`;
+      case 'workflow_progress':
+        return `[${event.scenario}] ${event.current_node}: ${event.status}`;
+      default:
+        return '';
+    }
+  })();
+
+  return (
+    <div className="flex items-center gap-2 py-1 text-xs text-text-secondary">
+      <span className="shrink-0">{icon}</span>
+      <span className="truncate">{text}</span>
+    </div>
+  );
+}
+
 export default function ChatMessage({ message }: Props) {
   const isUser = message.role === 'user';
+  const [processExpanded, setProcessExpanded] = useState(false);
+
+  // 过程事件（不含 answer_start/answer_done）
+  const processEvents = message.events.filter(
+    (e) => !e.type.startsWith('answer')
+  );
+
+  // 是否有可展示的过程
+  const hasProcess = processEvents.length > 0;
 
   return (
     <div className={`message-bubble ${isUser ? 'message-user' : 'message-assistant'}`}>
@@ -31,65 +83,103 @@ export default function ChatMessage({ message }: Props) {
           {isUser ? (
             <div className="whitespace-pre-wrap text-[15px] leading-relaxed">{message.content}</div>
           ) : (
-            <div className="markdown-body">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  code({ node, className, children, ...props }) {
-                    const match = /language-(\w+)/.exec(className || '');
-                    const inline = !match;
-                    return !inline ? (
-                      <SyntaxHighlighter
-                        style={oneDark as any}
-                        language={match[1]}
-                        PreTag="div"
-                      >
-                        {String(children).replace(/\n$/, '')}
-                      </SyntaxHighlighter>
-                    ) : (
-                      <code
-                        className="bg-bg-hover px-1.5 py-0.5 rounded text-primary text-[13px]"
-                        {...props}
-                      >
-                        {children}
-                      </code>
-                    );
-                  },
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
-              {message.isStreaming && (
-                <span className="inline-block w-2 h-4 bg-primary ml-1 animate-pulse" />
+            <>
+              {/* 执行过程（可折叠） */}
+              {hasProcess && (
+                <div className="mb-2">
+                  <button
+                    className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors"
+                    onClick={() => setProcessExpanded(!processExpanded)}
+                  >
+                    {processExpanded ? <DownOutlined style={{ fontSize: 10 }} /> : <RightOutlined style={{ fontSize: 10 }} />}
+                    <ThunderboltOutlined style={{ fontSize: 10 }} />
+                    <span>执行过程 ({processEvents.length})</span>
+                  </button>
+                  {processExpanded && (
+                    <div className="mt-1.5 pl-3 border-l-2 border-white/10 space-y-0.5">
+                      {processEvents.map((evt, i) => (
+                        <EventItem key={i} event={evt} />
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
-            </div>
-          )}
 
-          {/* AI 回复底部：Trace 链接 + 执行模式 */}
-          {!isUser && !message.isStreaming && message.jaegerUrl && (
-            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5">
-              <Tooltip title={`Trace ID: ${message.traceId}`}>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<LinkOutlined />}
-                  className="!text-primary !p-0 !h-auto !text-xs"
-                  onClick={() => window.open(`http://localhost:16686/trace/${message.traceId}`, '_blank')}
+              {/* 答案正文 */}
+              <div className="markdown-body">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    code({ node, className, children, ...props }) {
+                      const match = /language-(\w+)/.exec(className || '');
+                      const inline = !match;
+                      return !inline ? (
+                        <SyntaxHighlighter
+                          style={oneDark as any}
+                          language={match[1]}
+                          PreTag="div"
+                        >
+                          {String(children).replace(/\n$/, '')}
+                        </SyntaxHighlighter>
+                      ) : (
+                        <code
+                          className="bg-bg-hover px-1.5 py-0.5 rounded text-primary text-[13px]"
+                          {...props}
+                        >
+                          {children}
+                        </code>
+                      );
+                    },
+                  }}
                 >
-                  查看 Trace 链路
-                </Button>
-              </Tooltip>
-              {message.workflowStatus && (
-                <Tag color="blue" className="!text-[10px] !px-1 !py-0 !m-0">
-                  工作流: {message.workflowStatus.scenario}
-                </Tag>
+                  {message.content}
+                </ReactMarkdown>
+                {message.isStreaming && (
+                  <span className="inline-block w-2 h-4 bg-primary ml-1 animate-pulse" />
+                )}
+              </div>
+
+              {/* 底部元信息 */}
+              {!message.isStreaming && (message.jaegerUrl || message.summary) && (
+                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5 flex-wrap">
+                  {message.summary && (
+                    <>
+                      <Tag color={message.summary.mode === 'workflow' ? 'blue' : 'green'} className="!text-[10px] !px-1.5 !py-0 !m-0">
+                        {message.summary.mode === 'workflow' ? '工作流' : 'ReAct'}
+                      </Tag>
+                      <span className="text-text-muted text-[11px] flex items-center gap-1">
+                        <ClockCircleOutlined style={{ fontSize: 10 }} />
+                        {message.summary.execution_time}s
+                      </span>
+                      {message.summary.tool_calls_count > 0 && (
+                        <span className="text-text-muted text-[11px] flex items-center gap-1">
+                          <ToolOutlined style={{ fontSize: 10 }} />
+                          {message.summary.tool_calls_count}次调用
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {message.jaegerUrl && (
+                    <Tooltip title={`Trace: ${message.traceId}`}>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<LinkOutlined />}
+                        className="!text-primary !p-0 !h-auto !text-[11px]"
+                        onClick={() => window.open(message.jaegerUrl, '_blank', 'noopener,noreferrer')}
+                      >
+                        Trace
+                      </Button>
+                    </Tooltip>
+                  )}
+                  {message.workflowStatus && (
+                    <Tag color="blue" className="!text-[10px] !px-1 !py-0 !m-0">
+                      {message.workflowStatus.scenario}
+                    </Tag>
+                  )}
+                </div>
               )}
-              {!message.workflowStatus && (
-                <Tag color="green" className="!text-[10px] !px-1 !py-0 !m-0">
-                  ReAct 模式
-                </Tag>
-              )}
-            </div>
+            </>
           )}
         </div>
       </div>

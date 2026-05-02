@@ -16,7 +16,8 @@ from .schemas import (
     ModelInfo, ModelList,
     ServerInfo, ServerListResponse,
     WorkflowStatusResponse, WorkflowNodeStatus,
-    ReportInfo, ReportListResponse, ReportDetail
+    ReportInfo, ReportListResponse, ReportDetail,
+    SessionSummary, SessionListResponse, SessionDetail, SessionMessage
 )
 
 router = APIRouter()
@@ -70,11 +71,13 @@ async def chat_completions(request: ChatRequest):
             raise HTTPException(status_code=400, detail="No user message provided")
         
         logger.info(f"Received chat request: {user_query[:100]}...")
+        session_id = request.session_id
+        conversation_id = request.conversation_id or session_id
         
         # Streaming mode
         if request.stream:
             return StreamingResponse(
-                stream_chat_response(user_query),
+                stream_chat_response(user_query, session_id=session_id, conversation_id=conversation_id),
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
@@ -84,7 +87,11 @@ async def chat_completions(request: ChatRequest):
         
         # Sync mode
         orchestrator = await get_orchestrator()
-        result = await orchestrator.process_query(user_query)
+        result = await orchestrator.process_query(
+            user_query,
+            session_id=session_id,
+            conversation_id=conversation_id
+        )
         
         # Format response
         content = format_response_markdown(result)
@@ -101,13 +108,20 @@ async def chat_completions(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def stream_chat_response(query: str) -> AsyncGenerator[str, None]:
+async def stream_chat_response(
+    query: str,
+    session_id: Optional[str] = None,
+    conversation_id: Optional[str] = None
+) -> AsyncGenerator[str, None]:
     """
     Stream chat response using SSE (Server-Sent Events)
     
-    真流式：在 ReAct 循环的每一步实时推送进度（思考、工具调用、观察）
+    双通道架构：
+    - delta.content: 只承载用户最终看到的回答正文
+    - metadata: 承载思考、工具调用、工作流进度、统计等过程事件
     """
     import asyncio
+    import re
     
     chat_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     
@@ -122,13 +136,54 @@ async def stream_chat_response(query: str) -> AsyncGenerator[str, None]:
     except Exception:
         pass
     
-    def push_content(text: str) -> str:
-        """推送一个内容 chunk"""
+    def push_delta(text: str) -> str:
+        """推送正文 chunk — 只承载最终答案文本"""
         return format_sse({
             "id": chat_id,
             "object": "chat.completion.chunk",
             "choices": [{"delta": {"content": text}, "index": 0}]
         })
+    
+    def push_meta(event_type: str, payload: dict) -> str:
+        """推送元事件 — 不污染正文，供前端过程面板消费"""
+        data = {
+            "id": chat_id,
+            "object": "chat.completion.chunk",
+            "choices": [{"delta": {}, "index": 0}],
+            "metadata": {"type": event_type, **payload},
+        }
+        return format_sse(data)
+    
+    def push_finish(trace_id: str | None, jaeger_url: str | None,
+                     workflow: dict | None = None) -> str:
+        """推送结束 chunk"""
+        finish_data = {
+            "id": chat_id,
+            "object": "chat.completion.chunk",
+            "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}]
+        }
+        if trace_id:
+            finish_data["trace_id"] = trace_id
+            finish_data["jaeger_url"] = jaeger_url
+        if workflow:
+            finish_data["workflow"] = workflow
+        return format_sse(finish_data)
+    
+    def _summarize_tool_result(result: dict) -> str:
+        """精简工具结果为一句可读摘要"""
+        if not result.get("success", True):
+            return f"失败: {result.get('error', '未知错误')}"
+        data = result.get("data", result)
+        if isinstance(data, dict):
+            if "task_id" in data:
+                return f"task_id: {data['task_id']}"
+            if "servers" in data:
+                return f"找到 {len(data.get('servers', []))} 台服务器"
+            if "status" in data:
+                return f"状态: {data['status']}"
+            preview = json.dumps(data, ensure_ascii=False)[:200]
+            return preview
+        return str(data)[:150]
     
     try:
         orchestrator = await get_orchestrator()
@@ -139,236 +194,188 @@ async def stream_chat_response(query: str) -> AsyncGenerator[str, None]:
             "object": "chat.completion.chunk",
             "choices": [{"delta": {"role": "assistant"}, "index": 0}]
         }
+        if session_id:
+            header_data["session_id"] = session_id
+        if conversation_id:
+            header_data["conversation_id"] = conversation_id
         if trace_id_hex:
             header_data["trace_id"] = trace_id_hex
             header_data["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
         yield format_sse(header_data)
         
-        # ---- 真流式：通过回调在 ReAct 每一步实时推送 ----
-        streamed_content = []  # 收集已推送的内容，最终无需再推
-        
-        async def on_thinking_start(iteration: int):
-            """ReAct 每轮思考开始"""
-            yield push_content(f"\n\n🔄 **第{iteration}轮思考中...**\n\n")
-        
-        async def on_thinking_result(iteration: int, reasoning: str, decision: dict):
-            """ReAct 思考结果出来"""
-            parts = []
-            # 推理摘要（截断太长的推理内容）
-            if reasoning:
-                preview = reasoning[:500] + ("..." if len(reasoning) > 500 else "")
-                parts.append(f"💭 *推理摘要*: {preview}\n\n")
-            
-            if decision.get("is_final"):
-                parts.append("✅ **已得到最终答案**\n\n")
-            elif decision.get("tool_name"):
-                tool_name = decision["tool_name"]
-                tool_args = decision.get("tool_args", {})
-                args_str = json.dumps(tool_args, ensure_ascii=False) if tool_args else ""
-                parts.append(f"🔧 **调用工具**: `{tool_name}`\n")
-                if args_str:
-                    parts.append(f"   参数: `{args_str[:200]}`\n")
-                parts.append("\n")
-            
-            if parts:
-                yield push_content("".join(parts))
-        
-        async def on_tool_result(tool_name: str, result: dict, exec_time: float):
-            """工具调用结果"""
-            parts = []
-            if result.get("success"):
-                # 精简结果展示
-                data = result.get("data", result)
-                if isinstance(data, dict):
-                    if "task_id" in data:
-                        parts.append(f"   ✅ 返回 task_id: `{data['task_id']}`\n")
-                    elif "servers" in data:
-                        servers = data.get("servers", [])
-                        parts.append(f"   ✅ 找到 {len(servers)} 台服务器\n")
-                    elif "status" in data:
-                        parts.append(f"   ✅ 状态: {data['status']}\n")
-                    else:
-                        preview = json.dumps(data, ensure_ascii=False)[:300]
-                        parts.append(f"   ✅ 结果: `{preview}`\n")
-                else:
-                    preview = str(data)[:200]
-                    parts.append(f"   ✅ 结果: `{preview}`\n")
-            else:
-                error = result.get("error", "未知错误")
-                parts.append(f"   ❌ 失败: {error}\n")
-            parts.append(f"   ⏱ 耗时: {exec_time:.2f}s\n\n")
-            
-            yield push_content("".join(parts))
-        
-        # ---- 调用带回调的 process_query_stream ----
         try:
-            async for event in orchestrator.process_query_stream(query):
+            async for event in orchestrator.process_query_stream(
+                query,
+                session_id=session_id,
+                conversation_id=conversation_id
+            ):
                 event_type = event.get("type")
+                if event.get("session_id"):
+                    session_id = event.get("session_id")
+                if event.get("conversation_id"):
+                    conversation_id = event.get("conversation_id")
                 
+                # ---- 过程事件 → metadata 通道 ----
                 if event_type == "thinking_start":
-                    iteration = event.get("iteration", 1)
-                    yield push_content(f"\n\n🔄 **第{iteration}轮思考中...**\n\n")
+                    yield push_meta("thinking_start", {
+                        "iteration": event.get("iteration", 1),
+                    })
                 
                 elif event_type == "thinking_result":
                     iteration = event.get("iteration", 1)
                     reasoning = event.get("reasoning", "")
                     decision = event.get("decision", {})
                     
-                    parts = []
-                    if reasoning:
-                        preview = reasoning[:500] + ("..." if len(reasoning) > 500 else "")
-                        parts.append(f"💭 *推理摘要*: {preview}\n\n")
-                    
-                    if decision.get("is_final"):
-                        parts.append("✅ **已得到最终答案**\n\n")
-                    elif decision.get("tool_name"):
-                        tool_name = decision["tool_name"]
-                        tool_args = decision.get("tool_args", {})
-                        args_str = json.dumps(tool_args, ensure_ascii=False) if tool_args else ""
-                        parts.append(f"🔧 **调用工具**: `{tool_name}`\n")
-                        if args_str:
-                            parts.append(f"   参数: `{args_str[:200]}`\n")
-                        parts.append("\n")
-                    
-                    if parts:
-                        yield push_content("".join(parts))
+                    yield push_meta("thinking_result", {
+                        "iteration": iteration,
+                        "reasoning_preview": reasoning[:300] if reasoning else "",
+                        "is_final": decision.get("is_final", False),
+                        "tool_name": decision.get("tool_name"),
+                        "tool_args": decision.get("tool_args"),
+                    })
                 
                 elif event_type == "tool_result":
                     tool_name = event.get("tool_name", "")
                     tool_result = event.get("result", {})
                     exec_time = event.get("execution_time", 0)
+                    success = tool_result.get("success", True)
                     
-                    parts = []
-                    if tool_result.get("success"):
-                        data = tool_result.get("data", tool_result)
-                        if isinstance(data, dict):
-                            if "task_id" in data:
-                                parts.append(f"   ✅ 返回 task_id: `{data['task_id']}`\n")
-                            elif "servers" in data:
-                                servers = data.get("servers", [])
-                                parts.append(f"   ✅ 找到 {len(servers)} 台服务器\n")
-                            elif "status" in data:
-                                parts.append(f"   ✅ 状态: {data['status']}\n")
-                            else:
-                                preview = json.dumps(data, ensure_ascii=False)[:300]
-                                parts.append(f"   ✅ 结果: `{preview}`\n")
-                        else:
-                            preview = str(data)[:200]
-                            parts.append(f"   ✅ 结果: `{preview}`\n")
-                    else:
-                        error = tool_result.get("error", "未知错误")
-                        parts.append(f"   ❌ 失败: {error}\n")
-                    parts.append(f"   ⏱ 耗时: {exec_time:.2f}s\n\n")
-                    
-                    yield push_content("".join(parts))
+                    yield push_meta("tool_result", {
+                        "tool_name": tool_name,
+                        "success": success,
+                        "summary": _summarize_tool_result(tool_result),
+                        "execution_time": round(exec_time, 2),
+                    })
                 
                 elif event_type == "workflow_progress":
-                    # 工作流模式进度
-                    node = event.get("current_node", "")
-                    status = event.get("status", "")
-                    scenario = event.get("scenario", "")
-                    icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(status, "⬜")
-                    yield push_content(f"{icon} **[{scenario}]** {node}: {status}\n")
+                    yield push_meta("workflow_progress", {
+                        "current_node": event.get("current_node", ""),
+                        "status": event.get("status", ""),
+                        "scenario": event.get("scenario", ""),
+                    })
                 
+                # ---- 答案流 → delta.content 通道 ----
+                elif event_type == "answer_start":
+                    # 答案即将开始，前端可做 UI 切换
+                    yield push_meta("answer_start", {})
+                
+                elif event_type == "answer_delta":
+                    # 真正的答案文本增量
+                    yield push_delta(event.get("content", ""))
+                
+                elif event_type == "answer_done":
+                    yield push_meta("answer_done", {})
+                
+                # ---- 完成 ----
                 elif event_type == "done":
-                    # 最终结果
                     result = event.get("result", {})
                     
-                    # 如果之前没拿到 trace_id，尝试从结果中获取
                     if not trace_id_hex and result.get("trace_id"):
                         trace_id_hex = result.get("trace_id")
+                    if result.get("session_id"):
+                        session_id = result.get("session_id")
+                    if result.get("conversation_id"):
+                        conversation_id = result.get("conversation_id")
                     
-                    # 推送最终结果
-                    yield push_content("\n\n---\n\n## 📋 执行结果\n\n")
-                    final_content = result.get("result", "")
-                    if final_content:
-                        yield push_content(final_content)
-                    
-                    # 性能统计
+                    # 性能统计 → metadata（不进正文）
                     execution_time = result.get("execution_time", 0)
                     tool_calls = result.get("tool_calls", [])
                     mode = result.get("mode", "react")
-                    stats = f"\n\n---\n\n⏱️ **性能统计**\n- 执行模式：{'工作流' if mode == 'workflow' else 'ReAct'}\n- 总耗时：{execution_time:.2f}秒\n- 工具调用：{len(tool_calls)}次\n"
-                    if trace_id_hex:
-                        stats += f"- 🔗 [查看 Trace 链路](/api/jaeger/trace/{trace_id_hex})\n"
-                    yield push_content(stats)
                     
-                    # Finish with metadata
-                    finish_data = {
-                        "id": chat_id,
-                        "object": "chat.completion.chunk",
-                        "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}]
-                    }
-                    if trace_id_hex:
-                        finish_data["trace_id"] = trace_id_hex
-                        finish_data["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+                    yield push_meta("summary", {
+                        "mode": mode,
+                        "execution_time": round(execution_time, 2),
+                        "tool_calls_count": len(tool_calls),
+                        "is_success": result.get("is_success", False),
+                    })
                     
+                    # workflow 元信息
+                    workflow_data = None
                     if result.get("node_statuses"):
-                        finish_data["workflow"] = {
+                        workflow_data = {
                             "scenario": result.get("scenario", ""),
                             "node_statuses": result.get("node_statuses", {}),
                             "completed_nodes": result.get("completed_nodes", []),
                             "current_node": result.get("current_node"),
                         }
                     
-                    yield format_sse(finish_data)
+                    finish_chunk = {
+                        "id": chat_id,
+                        "object": "chat.completion.chunk",
+                        "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}]
+                    }
+                    if trace_id_hex:
+                        finish_chunk["trace_id"] = trace_id_hex
+                        finish_chunk["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+                    if workflow_data:
+                        finish_chunk["workflow"] = workflow_data
+                    if session_id:
+                        finish_chunk["session_id"] = session_id
+                    if conversation_id:
+                        finish_chunk["conversation_id"] = conversation_id
+                    yield format_sse(finish_chunk)
                     yield "data: [DONE]\n\n"
                     return
         
         except AttributeError:
-            # 如果 orchestrator 没有 process_query_stream，降级到同步模式
+            # 降级：如果 orchestrator 没有 process_query_stream，走同步模式
             logger.warning("process_query_stream 不可用，降级到同步流式")
-            result = await orchestrator.process_query(query)
+            result = await orchestrator.process_query(query, session_id=session_id)
             
             if not trace_id_hex and result.get("trace_id"):
                 trace_id_hex = result.get("trace_id")
+            if result.get("session_id"):
+                session_id = result.get("session_id")
+            if result.get("conversation_id"):
+                conversation_id = result.get("conversation_id")
             
-            # 推送完整结果
-            thinking = result.get("thinking_process", "")
-            if thinking:
-                yield push_content("## 💭 思考过程\n\n")
-                yield push_content(thinking)
-                yield push_content("\n\n---\n\n")
+            # 直接推送答案正文
+            final_content = result.get("result", "")
+            if final_content:
+                # 按段落切片输出，让前端看起来是渐进的
+                paragraphs = re.split(r'(\n\n+)', final_content)
+                for para in paragraphs:
+                    if para.strip():
+                        yield push_delta(para)
             
-            yield push_content("## ✅ 执行结果\n\n")
-            yield push_content(result.get("result", ""))
+            # 统计 → metadata
+            yield push_meta("summary", {
+                "mode": result.get("mode", "react"),
+                "execution_time": round(result.get("execution_time", 0), 2),
+                "tool_calls_count": len(result.get("tool_calls", [])),
+                "is_success": result.get("is_success", False),
+            })
             
-            execution_time = result.get("execution_time", 0)
-            tool_calls = result.get("tool_calls", [])
-            stats = f"\n\n---\n\n⏱️ **性能统计**\n- 总耗时：{execution_time:.2f}秒\n- 工具调用：{len(tool_calls)}次\n"
-            if trace_id_hex:
-                stats += f"- 🔗 [查看 Trace 链路](/api/jaeger/trace/{trace_id_hex})\n"
-            yield push_content(stats)
-            
-            finish_data = {
-                "id": chat_id,
-                "object": "chat.completion.chunk",
-                "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}]
-            }
-            if trace_id_hex:
-                finish_data["trace_id"] = trace_id_hex
-                finish_data["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+            workflow_data = None
             if result.get("node_statuses"):
-                finish_data["workflow"] = {
+                workflow_data = {
                     "scenario": result.get("scenario", ""),
                     "node_statuses": result.get("node_statuses", {}),
                     "completed_nodes": result.get("completed_nodes", []),
                     "current_node": result.get("current_node"),
                 }
-            yield format_sse(finish_data)
+            
+            finish_chunk = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}]
+            }
+            if trace_id_hex:
+                finish_chunk["trace_id"] = trace_id_hex
+                finish_chunk["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+            if workflow_data:
+                finish_chunk["workflow"] = workflow_data
+            if session_id:
+                finish_chunk["session_id"] = session_id
+            if conversation_id:
+                finish_chunk["conversation_id"] = conversation_id
+            yield format_sse(finish_chunk)
             yield "data: [DONE]\n\n"
             return
     
     except Exception as e:
         logger.error(f"Stream error: {str(e)}")
-        yield format_sse({
-            "id": chat_id,
-            "object": "chat.completion.chunk",
-            "choices": [{
-                "delta": {"content": f"\n\n❌ 错误：{str(e)}"},
-                "index": 0
-            }]
-        })
+        yield push_delta(f"❌ 错误：{str(e)}")
         yield "data: [DONE]\n\n"
 
 
@@ -403,6 +410,13 @@ def format_response_markdown(result: dict) -> str:
     return "".join(parts)
 
 
+def _iso(value):
+    """datetime -> isoformat，None 原样返回"""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
 @router.get("/models", response_model=ModelList)
 async def list_models():
     """List available models"""
@@ -412,6 +426,80 @@ async def list_models():
             ModelInfo(id="perfa-react"),
         ]
     )
+
+
+@router.get("/sessions", response_model=SessionListResponse)
+async def list_sessions(limit: int = 20):
+    """获取真实会话列表"""
+    try:
+        orchestrator = await get_orchestrator()
+        sessions = orchestrator.get_recent_sessions(limit=limit)
+        return SessionListResponse(
+            sessions=[
+                SessionSummary(
+                    session_id=item["session_id"],
+                    title=item.get("title", "新对话"),
+                    message_count=item.get("message_count", 0),
+                    created_at=_iso(item.get("created_at")),
+                    last_active=_iso(item.get("last_active")),
+                    last_user_message=item.get("last_user_message"),
+                )
+                for item in sessions
+            ]
+        )
+    except Exception as e:
+        logger.error(f"List sessions error: {e}")
+        return SessionListResponse(sessions=[])
+
+
+@router.get("/sessions/{session_id}", response_model=SessionDetail)
+async def get_session(session_id: str):
+    """获取单个会话完整历史"""
+    try:
+        orchestrator = await get_orchestrator()
+        detail = orchestrator.memory.get_session_detail(session_id)
+        if not detail:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        return SessionDetail(
+            session_id=detail["session_id"],
+            title=detail.get("title", "新对话"),
+            message_count=detail.get("message_count", 0),
+            created_at=_iso(detail.get("created_at")),
+            last_active=_iso(detail.get("last_active")),
+            last_user_message=detail.get("last_user_message"),
+            messages=[
+                SessionMessage(
+                    role=message.get("role", ""),
+                    content=message.get("content", ""),
+                    timestamp=_iso(message.get("timestamp")),
+                    metadata=message.get("metadata") or {},
+                )
+                for message in detail.get("messages", [])
+            ],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get session error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """删除单个会话"""
+    try:
+        orchestrator = await get_orchestrator()
+        detail = orchestrator.memory.get_session_detail(session_id)
+        if not detail:
+            raise HTTPException(status_code=404, detail="Session not found")
+        orchestrator.clear_session(session_id)
+        return {"success": True, "session_id": session_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete session error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===== Extended API Endpoints =====
@@ -445,6 +533,7 @@ async def list_servers():
                     # 尝试获取实时状态
                     server_id = s.get("server_id", s.get("id", ""))
                     status = "unknown"
+                    status_result = {}
                     if check_status_tool and server_id:
                         try:
                             status_result = await check_status_tool.ainvoke({"server_id": server_id})
@@ -478,6 +567,11 @@ async def list_servers():
                         status=status,
                         tags=s.get("tags", []),
                         hardware=s.get("hardware", s.get("system_info")),
+                        agent_id=s.get("agent_id"),
+                        agent_port=s.get("agent_port"),
+                        agent_status=status_result.get("agent_status") if isinstance(status_result, dict) else s.get("agent_status"),
+                        agent_version=status_result.get("version") if isinstance(status_result, dict) else None,
+                        current_task=status_result.get("current_task") if isinstance(status_result, dict) else None,
                     ))
 
             return ServerListResponse(servers=servers)
@@ -497,6 +591,17 @@ class RegisterServerRequest(BaseModel):
     ssh_key_path: Optional[str] = Field(None, description="SSH 密钥路径")
     alias: Optional[str] = Field(None, description="服务器别名")
     tags: List[str] = Field(default_factory=list, description="标签")
+
+
+class AgentDeployRequest(BaseModel):
+    """Agent 部署请求"""
+    force_reinstall: bool = Field(default=False, description="是否强制重装")
+    agent_only: bool = Field(default=True, description="是否仅重装 node_agent")
+
+
+class AgentUninstallRequest(BaseModel):
+    """Agent 卸载请求"""
+    keep_data: bool = Field(default=True, description="是否保留数据")
 
 
 @router.post("/servers/register")
@@ -575,6 +680,103 @@ async def remove_server(server_id: str):
         raise
     except Exception as e:
         logger.error(f"Remove server error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/servers/{server_id}/agent/deploy")
+async def deploy_server_agent(server_id: str, req: AgentDeployRequest):
+    """安装或重装指定服务器的 Agent"""
+    try:
+        orchestrator = await get_orchestrator()
+        deploy_tool = orchestrator.tools_dict.get("deploy_agent")
+
+        if not deploy_tool:
+            raise HTTPException(status_code=501, detail="deploy_agent 工具不可用")
+
+        result = await deploy_tool.ainvoke({
+            "server_id": server_id,
+            "force_reinstall": req.force_reinstall,
+            "agent_only": req.agent_only,
+        })
+
+        if isinstance(result, str):
+            import json as _json
+            try:
+                result = _json.loads(result)
+            except _json.JSONDecodeError:
+                result = {"raw": result}
+
+        if isinstance(result, dict) and not result.get("success", True):
+            return {"success": False, "error": result.get("error", "Agent 部署失败"), "data": result}
+
+        return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Deploy agent error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/servers/{server_id}/agent/uninstall")
+async def uninstall_server_agent(server_id: str, req: AgentUninstallRequest):
+    """卸载指定服务器上的 Agent"""
+    try:
+        orchestrator = await get_orchestrator()
+        uninstall_tool = orchestrator.tools_dict.get("uninstall_agent")
+
+        if not uninstall_tool:
+            raise HTTPException(status_code=501, detail="uninstall_agent 工具不可用")
+
+        result = await uninstall_tool.ainvoke({
+            "server_id": server_id,
+            "keep_data": req.keep_data,
+        })
+
+        if isinstance(result, str):
+            import json as _json
+            try:
+                result = _json.loads(result)
+            except _json.JSONDecodeError:
+                result = {"raw": result}
+
+        if isinstance(result, dict) and not result.get("success", True):
+            return {"success": False, "error": result.get("error", "Agent 卸载失败"), "data": result}
+
+        return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Uninstall agent error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/servers/{server_id}/agent/status")
+async def get_server_agent_status(server_id: str):
+    """获取指定服务器的 Agent 实时状态"""
+    try:
+        orchestrator = await get_orchestrator()
+        status_tool = orchestrator.tools_dict.get("check_agent_status")
+
+        if not status_tool:
+            raise HTTPException(status_code=501, detail="check_agent_status 工具不可用")
+
+        result = await status_tool.ainvoke({"server_id": server_id})
+
+        if isinstance(result, str):
+            import json as _json
+            try:
+                result = _json.loads(result)
+            except _json.JSONDecodeError:
+                result = {"raw": result}
+
+        if isinstance(result, dict) and not result.get("success", True):
+            return {"success": False, "error": result.get("error", "获取 Agent 状态失败"), "data": result}
+
+        return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get agent status error: {e}")
         return {"success": False, "error": str(e)}
 
 

@@ -1,16 +1,36 @@
 /**
- * SSE 流式解析器 — 解析 OpenAI 兼容格式的 SSE chunks
+ * SSE 流式解析器 — 双通道架构
  *
- * 格式:
- *   data: {"choices":[{"delta":{"content":"xxx"}}]}
- *   data: {"choices":[...], "trace_id":"xxx", "jaeger_url":"xxx", "workflow":{...}}
- *   data: [DONE]
+ * delta.content: 只承载最终答案文本
+ * metadata: 承载过程事件（thinking/tool/workflow/summary 等）
  */
 
+export interface ProcessEvent {
+  type: 'thinking_start' | 'thinking_result' | 'tool_result' | 'workflow_progress' | 'answer_start' | 'answer_done' | 'summary';
+  iteration?: number;
+  reasoning_preview?: string;
+  is_final?: boolean;
+  tool_name?: string;
+  tool_args?: Record<string, any>;
+  success?: boolean;
+  summary?: string;
+  execution_time?: number;
+  current_node?: string;
+  status?: string;
+  scenario?: string;
+  mode?: string;
+  tool_calls_count?: number;
+  is_success?: boolean;
+}
+
 export interface SSEChunk {
+  /** 正文增量（只来自 answer_delta） */
   content: string;
   done: boolean;
-  metadata?: Record<string, any>;
+  /** 过程事件（metadata 通道） */
+  event?: ProcessEvent;
+  session_id?: string;
+  conversation_id?: string;
   trace_id?: string;
   jaeger_url?: string;
   workflow?: {
@@ -21,9 +41,14 @@ export interface SSEChunk {
   };
 }
 
-export function parseSSELine(line: string): SSEChunk | null {
-  if (!line.startsWith('data: ')) return null;
-  const data = line.slice(6).trim();
+export function parseSSEEventBlock(block: string): SSEChunk | null {
+  const data = block
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).replace(/^ /, ''))
+    .join('\n');
+
+  if (!data) return null;
   if (data === '[DONE]') return { content: '', done: true };
 
   try {
@@ -31,20 +56,41 @@ export function parseSSELine(line: string): SSEChunk | null {
     const delta = parsed.choices?.[0]?.delta;
     const content = delta?.content || '';
 
-    // 提取 trace_id 和 jaeger_url
+    const session_id = parsed.session_id || undefined;
+    const conversation_id = parsed.conversation_id || undefined;
     const trace_id = parsed.trace_id || undefined;
     const jaeger_url = parsed.jaeger_url || undefined;
-
-    // 提取工作流元信息
     const workflow = parsed.workflow || undefined;
 
-    // 提取其他元信息
-    const metadata = parsed.metadata || undefined;
+    // 解析 metadata 事件
+    let event: ProcessEvent | undefined;
+    if (parsed.metadata && parsed.metadata.type) {
+      const m = parsed.metadata;
+      event = {
+        type: m.type,
+        iteration: m.iteration,
+        reasoning_preview: m.reasoning_preview,
+        is_final: m.is_final,
+        tool_name: m.tool_name,
+        tool_args: m.tool_args,
+        success: m.success,
+        summary: m.summary,
+        execution_time: m.execution_time,
+        current_node: m.current_node,
+        status: m.status,
+        scenario: m.scenario,
+        mode: m.mode,
+        tool_calls_count: m.tool_calls_count,
+        is_success: m.is_success,
+      };
+    }
 
     return {
       content,
       done: false,
-      metadata,
+      event,
+      session_id,
+      conversation_id,
       trace_id,
       jaeger_url,
       workflow,
@@ -56,9 +102,6 @@ export function parseSSELine(line: string): SSEChunk | null {
 
 /**
  * 从 ReadableStream 中逐块读取 SSE 事件
- * @param stream fetch Response.body
- * @param onChunk 每个解析出的 chunk 回调
- * @param onDone 流结束回调
  */
 export async function consumeSSEStream(
   stream: ReadableStream<Uint8Array>,
@@ -75,21 +118,29 @@ export async function consumeSSEStream(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      // 保留最后一行（可能不完整）
-      buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        const chunk = parseSSELine(line.trim());
-        if (chunk) {
-          onChunk(chunk);
-          if (chunk.done) {
-            onDone?.();
-            return;
-          }
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() || '';
+
+      for (const block of blocks) {
+        const chunk = parseSSEEventBlock(block);
+        if (!chunk) continue;
+
+        onChunk(chunk);
+        if (chunk.done) {
+          onDone?.();
+          return;
         }
       }
     }
+
+    if (buffer.trim()) {
+      const chunk = parseSSEEventBlock(buffer);
+      if (chunk) {
+        onChunk(chunk);
+      }
+    }
+
     onDone?.();
   } finally {
     reader.releaseLock();

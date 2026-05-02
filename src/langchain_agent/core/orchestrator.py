@@ -140,7 +140,13 @@ class AgentOrchestrator:
             max_tokens=self.llm_config.zhipu_max_tokens
         )
     
-    async def process_query(self, query: str, session_id: Optional[str] = None, mode: str = "auto") -> Dict[str, Any]:
+    async def process_query(
+        self,
+        query: str,
+        session_id: Optional[str] = None,
+        mode: str = "auto",
+        conversation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         处理用户查询
         
@@ -158,6 +164,8 @@ class AgentOrchestrator:
         if not session_id:
             import uuid
             session_id = f"session_{uuid.uuid4().hex[:16]}"
+        if not conversation_id:
+            conversation_id = session_id
         
         if mode not in ["auto", "react", "workflow"]:
             logger.warning(f"未知的执行模式 '{mode}'，使用默认模式 'auto'")
@@ -180,7 +188,12 @@ class AgentOrchestrator:
                 from opentelemetry import context as otel_ctx, trace
                 _span = _tracer.start_span(
                     "orchestrator.process_query",
-                    attributes={"query": query[:200], "session_id": session_id, "mode": mode},
+                    attributes={
+                        "query": query[:200],
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "mode": mode
+                    },
                 )
                 ctx = trace.set_span_in_context(_span)
                 _token = otel_ctx.attach(ctx)
@@ -195,7 +208,7 @@ class AgentOrchestrator:
             from langchain_agent.observability.metrics import get_metric
             session_metric = get_metric("session_active")
             if session_metric:
-                session_metric.add(1, {"session_id": session_id})
+                session_metric.add(1, {"session_id": session_id, "conversation_id": conversation_id})
         except Exception:
             pass
         
@@ -298,6 +311,7 @@ class AgentOrchestrator:
             if _trace_id:
                 result["trace_id"] = _trace_id
                 result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+            result["conversation_id"] = conversation_id
             
             return result
             
@@ -367,22 +381,37 @@ class AgentOrchestrator:
             "reasoning_time": response.reasoning_time if hasattr(response, 'reasoning_time') else 0
         }
     
-    async def process_query_stream(self, query: str, session_id: Optional[str] = None, mode: str = "auto"):
+    async def process_query_stream(
+        self,
+        query: str,
+        session_id: Optional[str] = None,
+        mode: str = "auto",
+        conversation_id: Optional[str] = None
+    ):
         """
-        流式处理用户查询 — 在 ReAct 循环的每一步 yield 事件
+        流式处理用户查询 — 双通道事件流
         
-        事件类型:
+        过程事件（metadata 通道）：
         - thinking_start: 开始思考 {iteration}
-        - thinking_result: 思考完成 {iteration, reasoning, decision}
+        - thinking_result: 思考完成 {iteration, reasoning_preview, decision}
         - tool_result: 工具调用结果 {tool_name, result, execution_time}
         - workflow_progress: 工作流进度 {current_node, status, scenario}
-        - done: 完成 {result}
+        
+        答案事件（content 通道）：
+        - answer_start: 答案即将开始
+        - answer_delta: 答案文本增量 {content}
+        - answer_done: 答案流结束
+        
+        完成事件：
+        - done: 整个处理完成 {result}
         """
         import asyncio
         
         if not session_id:
             import uuid
             session_id = f"session_{uuid.uuid4().hex[:16]}"
+        if not conversation_id:
+            conversation_id = session_id
         
         logger.info(f"[Stream] 开始流式处理查询，会话ID: {session_id}，模式: {mode}")
         
@@ -400,7 +429,12 @@ class AgentOrchestrator:
                 from opentelemetry import context as otel_ctx, trace
                 _span = _tracer.start_span(
                     "orchestrator.process_query_stream",
-                    attributes={"query": query[:200], "session_id": session_id, "mode": mode},
+                    attributes={
+                        "query": query[:200],
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "mode": mode
+                    },
                 )
                 ctx = trace.set_span_in_context(_span)
                 _token = otel_ctx.attach(ctx)
@@ -447,13 +481,21 @@ class AgentOrchestrator:
                 if _trace_id:
                     result["trace_id"] = _trace_id
                     result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+                result["conversation_id"] = conversation_id
+                
+                # 流式推送答案正文
+                final_content = result.get("result", "")
+                if final_content:
+                    yield {"type": "answer_start"}
+                    async for chunk in self._stream_answer(final_content):
+                        yield chunk
+                    yield {"type": "answer_done"}
                 
                 yield {"type": "done", "result": result}
             else:
                 # ---- ReAct 模式（逐步推送） ----
                 session_history = self.memory.get_history(session_id, last_n=10)
                 
-                # 直接执行 ReAct 循环，在每个步骤之间 yield 事件
                 from langchain_agent.agents.base_agent import AgentResponse, ToolCall
                 
                 self.agent.thoughts.clear()
@@ -466,13 +508,11 @@ class AgentOrchestrator:
                 while iteration < self.agent.max_iterations:
                     iteration += 1
                     
-                    # 推送：开始思考
                     yield {
                         "type": "thinking_start",
                         "iteration": iteration,
                     }
                     
-                    # 思考
                     think_start_dt = __import__('datetime').datetime.now()
                     thought, full_reasoning = await self.agent._think(
                         query, tool_calls,
@@ -485,7 +525,6 @@ class AgentOrchestrator:
                     if full_reasoning:
                         thinking_log.append(f"### 思考 #{iteration}\n\n{full_reasoning}")
                     
-                    # 推送：思考结果
                     yield {
                         "type": "thinking_result",
                         "iteration": iteration,
@@ -519,7 +558,6 @@ class AgentOrchestrator:
                         )
                         tool_calls.append(tool_call)
                         
-                        # 推送：工具调用结果
                         yield {
                             "type": "tool_result",
                             "tool_name": tool_name,
@@ -539,6 +577,7 @@ class AgentOrchestrator:
                 result = {
                     "success": True,
                     "session_id": session_id,
+                    "conversation_id": conversation_id,
                     "query": query,
                     "result": final_result or "未生成结果",
                     "tool_calls": [
@@ -569,6 +608,14 @@ class AgentOrchestrator:
                 if _trace_id:
                     result["trace_id"] = _trace_id
                     result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+                result["conversation_id"] = conversation_id
+                
+                # 流式推送答案正文
+                if result.get("result"):
+                    yield {"type": "answer_start"}
+                    async for chunk in self._stream_answer(result["result"]):
+                        yield chunk
+                    yield {"type": "answer_done"}
                 
                 yield {"type": "done", "result": result}
         
@@ -581,6 +628,7 @@ class AgentOrchestrator:
                 "result": {
                     "success": False,
                     "session_id": session_id,
+                    "conversation_id": conversation_id,
                     "query": query,
                     "result": f"处理失败: {str(e)}",
                     "tool_calls": [],
@@ -597,6 +645,24 @@ class AgentOrchestrator:
             if _token:
                 from opentelemetry import context as otel_ctx
                 otel_ctx.detach(_token)
+    
+    async def _stream_answer(self, text: str, chunk_size: int = 40):
+        """将最终答案按段落/片段切片流式输出"""
+        if not text:
+            return
+        # 按 markdown 段落分割，保持自然感
+        import re
+        parts = re.split(r'(\n\n+)', text)
+        buffer = ""
+        for part in parts:
+            buffer += part
+            # 累积到足够长度才输出一个 chunk
+            if len(buffer) >= chunk_size or part.strip() == "":
+                if buffer:
+                    yield {"type": "answer_delta", "content": buffer}
+                    buffer = ""
+        if buffer:
+            yield {"type": "answer_delta", "content": buffer}
     
     async def _run_workflow(self, scenario_name: str, query: str, session_id: str) -> Dict[str, Any]:
         """使用 LangGraph 工作流执行查询"""

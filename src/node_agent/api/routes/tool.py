@@ -8,6 +8,19 @@ from ..responses import success, error_response, ErrorCodes
 bp = Blueprint('tool', __name__)
 
 
+def _reject_if_benchmark_running(agent):
+    """压测运行期间禁止装卸工具，避免修改二进制时发生竞态。"""
+    executor = getattr(agent, 'benchmark_executor', None)
+    if executor and executor.is_busy():
+        current = executor.get_current_task()
+        return error_response(
+            ErrorCodes.TASK_RUNNING,
+            "当前有压测任务在运行，禁止安装或卸载工具",
+            {"current_task_id": current.task_id if current else None}
+        )
+    return None
+
+
 @bp.route('/api/tools', methods=['GET'])
 def list_tools():
     """
@@ -69,6 +82,10 @@ def install_tool(tool_name: str):
     
     if not agent or not agent.tool_manager:
         return error_response(ErrorCodes.INTERNAL_ERROR, "ToolManager not initialized")
+
+    busy_response = _reject_if_benchmark_running(agent)
+    if busy_response:
+        return busy_response
     
     result = agent.tool_manager.install_tool(tool_name)
     
@@ -98,6 +115,10 @@ def uninstall_tool(tool_name: str):
     
     if not agent or not agent.tool_manager:
         return error_response(ErrorCodes.INTERNAL_ERROR, "ToolManager not initialized")
+
+    busy_response = _reject_if_benchmark_running(agent)
+    if busy_response:
+        return busy_response
     
     result = agent.tool_manager.uninstall_tool(tool_name)
     

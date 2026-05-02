@@ -1,19 +1,18 @@
 'use client';
 
 import { useCallback, useRef, useEffect, useState } from 'react';
-import { Layout, List, Tag, Button, Typography, Badge, Empty } from 'antd';
+import { Tag, Button, Typography } from 'antd';
 import {
-  PlusOutlined, CloudServerOutlined, ReloadOutlined,
+  ReloadOutlined,
   DesktopOutlined
 } from '@ant-design/icons';
 import { useChatStore } from '@/store/useChatStore';
-import { chatCompletionStream, listServers, ServerInfo } from '@/lib/api';
+import { listServers, listSessions, ServerInfo } from '@/lib/api';
 import { consumeSSEStream } from '@/lib/sse';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import WorkflowProgress from './WorkflowProgress';
 
-const { Sider, Content } = Layout;
 const { Text } = Typography;
 
 const SCENARIOS = [
@@ -25,7 +24,11 @@ const SCENARIOS = [
 ];
 
 export default function ChatPage() {
-  const { messages, isLoading, addMessage, updateMessage, setLoading } =
+  const {
+    messages, sessionId, conversationId, isLoading,
+    addMessage, updateMessage, addEvent, setLoading,
+    setSessions, setSessionsLoading,
+  } =
     useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -59,14 +62,27 @@ export default function ChatPage() {
     loadServers();
   }, [loadServers]);
 
-  // 点击服务器 IP → 在对话中插入 "测试 <ip> 服务器"
-  const handleServerClick = useCallback((server: ServerInfo) => {
-    setSelectedServer(server.server_id);
-    const prompt = server.alias
-      ? `对服务器 ${server.alias} (${server.ip}) 执行性能测试`
-      : `对服务器 ${server.ip} 执行性能测试`;
-    sendMessage(prompt);
-  }, []);
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const sessions = await listSessions();
+      setSessions(
+        sessions.map((session) => ({
+          id: session.session_id,
+          title: session.title || '新对话',
+          createdAt: session.created_at ? new Date(session.created_at).getTime() : Date.now(),
+          updatedAt: session.last_active ? new Date(session.last_active).getTime() : Date.now(),
+          lastUserMessage: session.last_user_message,
+        }))
+      );
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [setSessions, setSessionsLoading]);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
 
   // 停止生成
   const handleStop = useCallback(() => {
@@ -76,14 +92,14 @@ export default function ChatPage() {
     }
     setLoading(false);
     // 标记最后一条正在流式的消息为完成
-    const lastStreaming = [...messages].reverse().find(m => m.isStreaming);
+    const lastStreaming = [...useChatStore.getState().messages].reverse().find((message) => message.isStreaming);
     if (lastStreaming) {
       updateMessage(lastStreaming.id, {
         isStreaming: false,
         content: lastStreaming.content || '（已停止生成）',
       });
     }
-  }, [messages, updateMessage, setLoading]);
+  }, [updateMessage, setLoading]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -105,10 +121,10 @@ export default function ChatPage() {
       abortControllerRef.current = controller;
 
       try {
-        const history = messages
+        const currentState = useChatStore.getState();
+        const history = currentState.messages
           .filter((m) => !m.isStreaming)
           .map((m) => ({ role: m.role, content: m.content }));
-        history.push({ role: 'user', content });
 
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api';
         const res = await fetch(`${API_BASE}/v1/chat/completions`, {
@@ -118,6 +134,8 @@ export default function ChatPage() {
             model: 'perfa-agent',
             messages: history,
             stream: true,
+            session_id: currentState.sessionId || sessionId,
+            conversation_id: currentState.conversationId || conversationId || currentState.sessionId || sessionId,
           }),
           signal: controller.signal,
         });
@@ -130,16 +148,45 @@ export default function ChatPage() {
         let workflowStatus: any = null;
         let traceId: string | undefined;
         let jaegerUrl: string | undefined;
+        let streamingStarted = false;
 
         await consumeSSEStream(
           stream,
           (chunk) => {
+            if (chunk.session_id) {
+              useChatStore.getState().setSessionId(chunk.session_id);
+            }
+            if (chunk.conversation_id) {
+              useChatStore.getState().setConversationId(chunk.conversation_id);
+            }
+            if (chunk.session_id || chunk.conversation_id) {
+              loadSessions();
+            }
+            // ---- 正文通道：只有 delta.content 才进入主消息 ----
             if (chunk.content) {
+              streamingStarted = true;
               fullContent += chunk.content;
               updateMessage(assistantId, {
                 content: fullContent,
                 isStreaming: true,
               });
+            }
+            // ---- 过程事件通道：metadata 事件进入 events 列表 ----
+            if (chunk.event) {
+              const evt = chunk.event;
+              // summary 事件特殊处理 → 存到 message.summary
+              if (evt.type === 'summary') {
+                updateMessage(assistantId, {
+                  summary: {
+                    mode: evt.mode || 'react',
+                    execution_time: evt.execution_time || 0,
+                    tool_calls_count: evt.tool_calls_count || 0,
+                    is_success: evt.is_success ?? true,
+                  },
+                });
+              } else {
+                addEvent(assistantId, evt);
+              }
             }
             if (chunk.workflow) {
               workflowStatus = chunk.workflow;
@@ -157,7 +204,7 @@ export default function ChatPage() {
           () => {
             updateMessage(assistantId, {
               isStreaming: false,
-              content: fullContent,
+              content: fullContent || (streamingStarted ? fullContent : '（本次响应没有返回正文）'),
               workflowStatus: workflowStatus || undefined,
               traceId,
               jaegerUrl,
@@ -167,9 +214,11 @@ export default function ChatPage() {
       } catch (err: any) {
         if (err.name === 'AbortError') {
           // 用户主动停止
+          const currentMessages = useChatStore.getState().messages;
+          const existingContent = currentMessages.find((message) => message.id === assistantId)?.content || '';
           updateMessage(assistantId, {
             isStreaming: false,
-            content: assistantId ? (messages.find(m => m.id === assistantId)?.content || '') + '\n\n*⏹ 已停止生成*' : '',
+            content: existingContent ? `${existingContent}\n\n*⏹ 已停止生成*` : '⏹ 已停止生成',
           });
         } else {
           updateMessage(assistantId, {
@@ -180,10 +229,20 @@ export default function ChatPage() {
       } finally {
         setLoading(false);
         abortControllerRef.current = null;
+        loadSessions();
       }
     },
-    [messages, addMessage, updateMessage, setLoading, isLoading]
+    [addMessage, updateMessage, setLoading, isLoading, sessionId, conversationId, loadSessions]
   );
+
+  // 点击服务器 IP → 在对话中插入 "测试 <ip> 服务器"
+  const handleServerClick = useCallback((server: ServerInfo) => {
+    setSelectedServer(server.server_id);
+    const prompt = server.alias
+      ? `对服务器 ${server.alias} (${server.ip}) 执行性能测试`
+      : `对服务器 ${server.ip} 执行性能测试`;
+    sendMessage(prompt);
+  }, [sendMessage]);
 
   const lastAssistantMsg = [...messages]
     .reverse()
@@ -222,12 +281,14 @@ export default function ChatPage() {
               {servers.map((server) => {
                 const isSelected = selectedServer === server.server_id;
                 const statusColor = server.status === 'online' ? '#34A853' : '#EA4335';
+                const isOffline = server.status !== 'online';
                 return (
                   <div
                     key={server.server_id}
                     className={`px-4 py-2.5 cursor-pointer transition-colors group
-                      ${isSelected ? 'bg-primary/10 border-l-2 border-l-primary' : 'border-l-2 border-l-transparent hover:bg-bg-hover'}`}
-                    onClick={() => !isLoading && handleServerClick(server)}
+                      ${isSelected ? 'bg-primary/10 border-l-2 border-l-primary' : 'border-l-2 border-l-transparent'}
+                      ${isOffline ? 'opacity-60 cursor-not-allowed' : 'hover:bg-bg-hover'}`}
+                    onClick={() => !isLoading && !isOffline && handleServerClick(server)}
                   >
                     <div className="flex items-center gap-2">
                       <span
@@ -253,6 +314,11 @@ export default function ChatPage() {
                             {t}
                           </Tag>
                         ))}
+                      </div>
+                    )}
+                    {isOffline && (
+                      <div className="ml-4 mt-1">
+                        <Text className="!text-[11px] !text-text-muted">离线服务器暂不支持直接发起测试</Text>
                       </div>
                     )}
                   </div>

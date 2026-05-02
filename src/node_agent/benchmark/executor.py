@@ -5,10 +5,12 @@ import os
 import signal
 import threading
 import logging
+import time
 from datetime import datetime
 from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 import subprocess
+import select
 
 from .task import BenchmarkTask, TaskStatus
 from .result import ResultCollector
@@ -31,6 +33,11 @@ class ToolNotInstalledError(BenchmarkError):
 
 class TaskRunningError(BenchmarkError):
     """已有任务在运行"""
+    pass
+
+
+class BenchmarkTimeoutError(BenchmarkError):
+    """压测任务超时"""
     pass
 
 
@@ -93,10 +100,12 @@ class BenchmarkExecutor:
 
     def is_busy(self) -> bool:
         """是否有任务在运行"""
+        self._cleanup_finished_current_task()
         return self._current_task is not None
 
     def get_current_task(self) -> Optional[BenchmarkTask]:
         """获取当前运行的任务"""
+        self._cleanup_finished_current_task()
         return self._current_task
 
     def run_benchmark(self, test_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -218,6 +227,7 @@ class BenchmarkExecutor:
             
             # 获取超时时间
             timeout = runner.get_timeout(task.params)
+            start_monotonic = time.monotonic()
             
             # 执行命令
             task.process = subprocess.Popen(
@@ -230,13 +240,32 @@ class BenchmarkExecutor:
             
             # 读取输出
             output_lines = []
+            stdout_fd = task.process.stdout.fileno() if task.process.stdout else None
             while True:
+                if timeout and (time.monotonic() - start_monotonic) > timeout:
+                    self._terminate_task_process(task)
+                    raise BenchmarkTimeoutError(
+                        f"Benchmark timed out after {timeout} seconds"
+                    )
+
+                if stdout_fd is None:
+                    if task.process.poll() is not None:
+                        break
+                    time.sleep(0.2)
+                    continue
+
+                ready, _, _ = select.select([stdout_fd], [], [], 1.0)
+                if not ready:
+                    if task.process.poll() is not None:
+                        break
+                    continue
+
                 line = task.process.stdout.readline()
                 if not line:
                     if task.process.poll() is not None:
                         break
                     continue
-                
+
                 output_lines.append(line)
                 self._append_log(log_path, line)
                 self._notify_log(task.task_id, line)
@@ -299,6 +328,36 @@ class BenchmarkExecutor:
             
         finally:
             task.process = None
+
+    def _cleanup_finished_current_task(self):
+        """清理已结束但未释放的 current_task 引用"""
+        with self._task_lock:
+            if not self._current_task or not self._current_task.process:
+                return
+            if self._current_task.process.poll() is None:
+                return
+            logger.warning(
+                "Detected finished process for current task %s without cleanup; releasing lock",
+                self._current_task.task_id,
+            )
+            self._current_task = None
+
+    def _terminate_task_process(self, task: BenchmarkTask):
+        """终止任务进程及其子进程"""
+        if not task.process:
+            return
+        try:
+            task.process.terminate()
+            try:
+                task.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                task.process.kill()
+                task.process.wait(timeout=5)
+        finally:
+            try:
+                self.cleaner.kill_process_tree(task.process.pid)
+            except Exception as exc:
+                logger.warning(f"Failed to kill process tree for {task.task_id}: {exc}")
 
     def _update_status(self, task: BenchmarkTask, status: TaskStatus):
         """更新任务状态"""

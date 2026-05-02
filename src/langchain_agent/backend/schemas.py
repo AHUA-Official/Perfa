@@ -17,6 +17,8 @@ class ChatRequest(BaseModel):
     """Chat completion request (OpenAI compatible)"""
     model: str = Field(default="perfa-agent", description="Model name (ignored)")
     messages: List[ChatMessage] = Field(..., description="Chat messages")
+    session_id: Optional[str] = Field(default=None, description="Session ID")
+    conversation_id: Optional[str] = Field(default=None, description="Conversation ID")
     stream: bool = Field(default=False, description="Enable streaming output")
     temperature: Optional[float] = Field(default=None, description="Temperature (ignored)")
     max_tokens: Optional[int] = Field(default=None, description="Max tokens (ignored)")
@@ -72,6 +74,11 @@ class ServerInfo(BaseModel):
     status: str = Field("unknown", description="在线状态: online/offline/unknown")
     tags: List[str] = Field(default_factory=list, description="标签")
     hardware: Optional[Dict[str, Any]] = Field(None, description="硬件信息")
+    agent_id: Optional[str] = Field(None, description="已部署的 Agent ID")
+    agent_port: Optional[int] = Field(None, description="Agent 端口")
+    agent_status: Optional[str] = Field(None, description="Agent 状态")
+    agent_version: Optional[str] = Field(None, description="Agent 版本")
+    current_task: Optional[Dict[str, Any]] = Field(None, description="当前任务")
 
 
 class ServerListResponse(BaseModel):
@@ -122,3 +129,37 @@ class ReportDetail(BaseModel):
     summary: Optional[str] = None
     content: Optional[Dict[str, Any]] = None
     charts: Optional[List[Dict[str, Any]]] = None
+
+
+class SessionSummary(BaseModel):
+    """会话摘要"""
+    session_id: str
+    title: str = "新对话"
+    message_count: int = 0
+    created_at: Optional[str] = None
+    last_active: Optional[str] = None
+    last_user_message: Optional[str] = None
+
+
+class SessionListResponse(BaseModel):
+    """会话列表响应"""
+    sessions: List[SessionSummary] = Field(default_factory=list)
+
+
+class SessionMessage(BaseModel):
+    """会话消息"""
+    role: str
+    content: str
+    timestamp: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SessionDetail(BaseModel):
+    """会话详情"""
+    session_id: str
+    title: str = "新对话"
+    message_count: int = 0
+    created_at: Optional[str] = None
+    last_active: Optional[str] = None
+    last_user_message: Optional[str] = None
+    messages: List[SessionMessage] = Field(default_factory=list)

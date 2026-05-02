@@ -20,7 +20,7 @@ class SuperPiRunner(BaseRunner):
     description = "SuperPi - CPU floating-point performance test"
     category = "cpu"
     typical_duration_seconds = 300  # 5分钟
-    requires_async = False
+    requires_async = True
     
     def prepare(self, task: BenchmarkTask, tool_manager) -> bool:
         """准备测试环境"""

@@ -75,3 +75,7 @@ webui-v2/node_modules/
 webui-v2/.next/
 webui-v2/out/
 webui-v2/.env*.local
+webui-v2/tsconfig.tsbuildinfo
+
+# 临时文件
+aifile/

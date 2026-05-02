@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { Layout, Menu, Button, Typography } from 'antd';
+import { useState, useCallback } from 'react';
+import { Layout, Menu, Button, Typography, Popconfirm, Tooltip } from 'antd';
 import {
   MessageOutlined,
   DesktopOutlined,
@@ -9,11 +9,15 @@ import {
   PlusOutlined,
   HistoryOutlined,
   EyeOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import ChatPage from '@/components/chat/ChatPage';
 import ServersPage from '@/components/servers/ServersPage';
 import ReportsPage from '@/components/reports/ReportsPage';
 import MonitorPage from '@/components/monitor/MonitorPage';
+import { useChatStore } from '@/store/useChatStore';
+import { deleteSession, getSession, listSessions } from '@/lib/api';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -30,6 +34,16 @@ const menuItems = [
 export default function HomePage() {
   const [currentPage, setCurrentPage] = useState<PageKey>('chat');
   const [collapsed, setCollapsed] = useState(false);
+  const {
+    createSession, clearMessages, sessions, activeSessionId,
+    switchSession, replaceMessages, setSessions, removeSession,
+    sessionsLoading, setSessionsLoading
+  } = useChatStore();
+
+  const handleNewChat = useCallback(() => {
+    createSession();
+    setCurrentPage('chat');
+  }, [createSession]);
 
   const renderPage = () => {
     switch (currentPage) {
@@ -44,6 +58,57 @@ export default function HomePage() {
     }
   };
 
+  const recentChats = sessions.slice(0, 8);
+
+  const loadSessionList = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const sessionList = await listSessions();
+      setSessions(
+        sessionList.map((session) => ({
+          id: session.session_id,
+          title: session.title || '新对话',
+          createdAt: session.created_at ? new Date(session.created_at).getTime() : Date.now(),
+          updatedAt: session.last_active ? new Date(session.last_active).getTime() : Date.now(),
+          lastUserMessage: session.last_user_message,
+        }))
+      );
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [setSessions, setSessionsLoading]);
+
+  const handleSelectSession = useCallback(async (sessionId: string) => {
+    try {
+      const session = await getSession(sessionId);
+      switchSession(
+        sessionId,
+        session.messages
+          .filter((message) => message.role === 'user' || message.role === 'assistant')
+          .map((message, index) => ({
+            id: `history_${session.session_id}_${index}`,
+            role: message.role as 'user' | 'assistant',
+            content: message.content,
+            timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
+            events: [],
+          }))
+      );
+    } catch {
+      replaceMessages([]);
+      switchSession(sessionId, []);
+    }
+    setCurrentPage('chat');
+  }, [replaceMessages, switchSession]);
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    await deleteSession(sessionId);
+    removeSession(sessionId);
+    if (activeSessionId === sessionId) {
+      clearMessages();
+    }
+    await loadSessionList();
+  }, [activeSessionId, clearMessages, loadSessionList, removeSession]);
+
   return (
     <Layout className="min-h-screen">
       <Sider
@@ -54,36 +119,88 @@ export default function HomePage() {
         className="!bg-bg-card"
         trigger={null}
       >
-        <div className="flex items-center gap-2 px-4 py-4 border-b border-white/5">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-bg-main font-bold text-sm">
-            P
+        <div className="flex flex-col h-full">
+          <div className="flex items-center gap-2 px-4 py-4 border-b border-white/5">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-bg-main font-bold text-sm">
+              P
+            </div>
+            {!collapsed && (
+              <Text className="!text-text-primary font-semibold text-lg">
+                Perfa
+              </Text>
+            )}
           </div>
+
+          <Menu
+            mode="inline"
+            selectedKeys={[currentPage]}
+            items={menuItems}
+            onClick={({ key }) => setCurrentPage(key as PageKey)}
+            className="!bg-transparent !border-r-0 mt-2"
+            theme="dark"
+          />
+
           {!collapsed && (
-            <Text className="!text-text-primary font-semibold text-lg">
-              Perfa
-            </Text>
-          )}
-        </div>
-
-        <Menu
-          mode="inline"
-          selectedKeys={[currentPage]}
-          items={menuItems}
-          onClick={({ key }) => setCurrentPage(key as PageKey)}
-          className="!bg-transparent !border-r-0 mt-2"
-          theme="dark"
-        />
-
-        {!collapsed && (
-          <div className="absolute bottom-4 left-4 right-4">
-            <div className="text-xs text-text-muted mb-2">会话历史</div>
-            <div className="space-y-1 max-h-40 overflow-y-auto">
-              <div className="text-xs text-text-secondary px-2 py-1 rounded hover:bg-bg-hover cursor-pointer truncate">
-                暂无历史会话
+            <div className="mt-auto px-4 py-3 border-t border-white/5">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs text-text-muted">对话历史</div>
+                <Tooltip title="刷新会话列表">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    className="!text-text-muted"
+                    loading={sessionsLoading}
+                    onClick={() => void loadSessionList()}
+                  />
+                </Tooltip>
+              </div>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {recentChats.length === 0 ? (
+                  <div className="text-xs text-text-secondary px-2 py-1 truncate">
+                    暂无消息
+                  </div>
+                ) : (
+                  recentChats.map((chat) => (
+                    <div
+                      key={chat.id}
+                      className={`text-xs px-2 py-1 rounded transition-colors ${
+                        chat.id === activeSessionId
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-text-secondary hover:bg-bg-hover'
+                      }`}
+                      title={chat.title}
+                    >
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="flex-1 text-left truncate"
+                          onClick={() => void handleSelectSession(chat.id)}
+                        >
+                          {chat.title}
+                        </button>
+                        {!chat.id.startsWith('pending_session') && (
+                          <Popconfirm
+                            title="删除这个会话？"
+                            okText="删除"
+                            cancelText="取消"
+                            onConfirm={() => void handleDeleteSession(chat.id)}
+                          >
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<DeleteOutlined />}
+                              className="!text-text-muted hover:!text-red-400"
+                            />
+                          </Popconfirm>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </Sider>
 
       <Layout>
@@ -104,6 +221,7 @@ export default function HomePage() {
               type="primary"
               icon={<PlusOutlined />}
               size="small"
+              onClick={handleNewChat}
             >
               新对话
             </Button>

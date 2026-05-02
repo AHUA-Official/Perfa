@@ -54,7 +54,9 @@ class ConversationMemory:
             self.session_metadata[session_id] = {
                 "created_at": datetime.now(),
                 "last_active": datetime.now(),
-                "message_count": 0
+                "message_count": 0,
+                "title": "新对话",
+                "last_user_message": None,
             }
             logger.debug(f"创建新会话: {session_id}")
         
@@ -69,6 +71,7 @@ class ConversationMemory:
         self.conversations[session_id].append(message)
         self.session_metadata[session_id]["last_active"] = datetime.now()
         self.session_metadata[session_id]["message_count"] += 1
+        self._refresh_session_metadata(session_id, role, content)
         
         # 保持最近N轮对话（每轮包含user和assistant，所以*2）
         max_messages = self.max_turns * 2
@@ -104,6 +107,23 @@ class ConversationMemory:
         
         logger.debug(f"获取会话 {session_id} 历史，共 {len(messages)} 条消息")
         return messages
+
+    def get_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """获取单个会话详情和完整消息历史"""
+        if session_id not in self.conversations:
+            logger.warning(f"会话不存在: {session_id}")
+            return None
+
+        metadata = self.session_metadata.get(session_id, {})
+        return {
+            "session_id": session_id,
+            "title": metadata.get("title", "新对话"),
+            "message_count": len(self.conversations.get(session_id, [])),
+            "created_at": metadata.get("created_at"),
+            "last_active": metadata.get("last_active"),
+            "last_user_message": metadata.get("last_user_message"),
+            "messages": self.get_history(session_id),
+        }
     
     def get_recent_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
@@ -130,9 +150,11 @@ class ConversationMemory:
             message_count = len(self.conversations.get(session_id, []))
             result.append({
                 "session_id": session_id,
+                "title": metadata.get("title", "新对话"),
                 "message_count": message_count,
                 "created_at": metadata["created_at"],
-                "last_active": metadata["last_active"]
+                "last_active": metadata["last_active"],
+                "last_user_message": metadata.get("last_user_message"),
             })
         
         logger.info(f"获取最近 {len(result)} 个会话")
@@ -174,6 +196,16 @@ class ConversationMemory:
         
         if expired:
             logger.info(f"清理 {len(expired)} 个过期会话")
+
+    def _refresh_session_metadata(self, session_id: str, role: str, content: str):
+        """根据最新消息更新会话展示元数据"""
+        metadata = self.session_metadata[session_id]
+        normalized = " ".join(content.split()).strip()
+
+        if role == "user" and normalized:
+            metadata["last_user_message"] = normalized
+            if metadata.get("title") in (None, "", "新对话"):
+                metadata["title"] = normalized[:30] + ("..." if len(normalized) > 30 else "")
     
     def get_session_stats(self) -> Dict[str, Any]:
         """获取会话统计信息"""

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Tabs, Typography, Card, Tag, Space, Badge, Input, Button, List, Empty, Spin, Tooltip, Descriptions } from 'antd';
+import { useState, useCallback, useEffect } from 'react';
+import { Tabs, Typography, Card, Tag, Space, Badge, Button, List, Empty, Tooltip, Descriptions, message } from 'antd';
 import {
   EyeOutlined,
   CheckCircleOutlined,
@@ -10,16 +10,26 @@ import {
   ApiOutlined,
   ThunderboltOutlined,
   WarningOutlined,
+  CloudServerOutlined,
+  RobotOutlined,
+  DatabaseOutlined,
+  DashboardOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
-const { Search } = Input;
 
-const IFRAME_URLS = {
-  jaeger: '/api/jaeger',
-  grafana: '/api/grafana',
-  victoriaMetrics: '/api/vm/vmui',
-};
+/** 所有服务统一配置 — 有代理走代理，没有的只显示端口信息 */
+const ALL_SERVICES = [
+  { name: 'Perfa Agent API', category: '核心服务', icon: <RobotOutlined />, proxyUrl: '/api/v1/models', port: 10000, desc: 'LangChain Agent + OpenAI 兼容 API', color: '#00D9A6' },
+  { name: 'MCP Server', category: '核心服务', icon: <ApiOutlined />, proxyUrl: null, port: 18080, desc: 'MCP 工具服务（SSH 管理）', color: '#4285F4' },
+  { name: 'Node Agent', category: '核心服务', icon: <CloudServerOutlined />, proxyUrl: null, port: 5000, desc: '节点 Agent（压测执行）', color: '#FBBC04' },
+  { name: 'WebUI V2', category: '核心服务', icon: <DashboardOutlined />, proxyUrl: null, port: 3002, desc: '前端界面（Next.js）', color: '#34A853' },
+  { name: 'OTel Collector', category: '可观测性', icon: <EyeOutlined />, proxyUrl: null, port: 4317, desc: 'OpenTelemetry 数据采集', color: '#FF6D00' },
+  { name: 'Jaeger UI', category: '可观测性', icon: <SearchOutlined />, proxyUrl: '/api/jaeger', port: 16686, desc: '分布式链路追踪', color: '#66BCFF' },
+  { name: 'Grafana', category: '可观测性', icon: <DashboardOutlined />, proxyUrl: '/api/grafana', port: 3000, desc: '监控看板', color: '#F46800' },
+  { name: 'VictoriaMetrics', category: '可观测性', icon: <DatabaseOutlined />, proxyUrl: '/api/vm', port: 8428, desc: '时序数据库', color: '#6C3FC5' },
+];
 
 interface TraceSpan {
   operation: string;
@@ -38,10 +48,33 @@ interface TraceDetail {
 }
 
 export default function MonitorPage() {
-  const [activeTab, setActiveTab] = useState('jaeger');
+  const [activeTab, setActiveTab] = useState('overview');
   const [traceSearchLoading, setTraceSearchLoading] = useState(false);
   const [traces, setTraces] = useState<TraceDetail[]>([]);
   const [searchError, setSearchError] = useState('');
+  const [serviceStatus, setServiceStatus] = useState<Record<string, 'checking' | 'online' | 'offline'>>({});
+
+  // 检测服务状态
+  const checkServices = useCallback(async () => {
+    const statusMap: Record<string, 'checking' | 'online' | 'offline'> = {};
+    
+    const checkPromises = ALL_SERVICES.filter(s => s.proxyUrl).map(async (svc) => {
+      statusMap[svc.name] = 'checking';
+      try {
+        const res = await fetch(svc.proxyUrl!, { signal: AbortSignal.timeout(3000) });
+        statusMap[svc.name] = res.ok ? 'online' : 'offline';
+      } catch {
+        statusMap[svc.name] = 'offline';
+      }
+    });
+
+    await Promise.all(checkPromises);
+    setServiceStatus(statusMap);
+  }, []);
+
+  useEffect(() => {
+    checkServices();
+  }, [checkServices]);
 
   const searchTraces = useCallback(async (query?: string) => {
     setTraceSearchLoading(true);
@@ -49,11 +82,10 @@ export default function MonitorPage() {
     try {
       const params = new URLSearchParams({
         service: 'perfa-agent',
-        lookback: '1800000000', // 30 min
+        lookback: '1800000000',
         limit: '10',
       });
       if (query) {
-        // 如果输入的是 trace ID，直接跳转
         if (/^[a-f0-9]{16,32}$/i.test(query.trim())) {
           window.open(`/api/jaeger/trace/${query.trim()}`, '_blank');
           setTraceSearchLoading(false);
@@ -113,7 +145,83 @@ export default function MonitorPage() {
     }
   }, []);
 
+  const openService = (svc: typeof ALL_SERVICES[0]) => {
+    if (svc.proxyUrl) {
+      window.open(svc.proxyUrl, '_blank');
+    }
+    // 没有代理的服务不自动跳转，只显示端口信息
+  };
+
   const tabs = [
+    {
+      key: 'overview',
+      label: (
+        <span className="flex items-center gap-2">
+          <DashboardOutlined />
+          服务总览
+        </span>
+      ),
+      children: (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between mb-2">
+            <Text className="!text-text-secondary">所有服务的运行状态和入口</Text>
+            <Button size="small" icon={<ReloadOutlined />} onClick={checkServices} className="!text-text-muted">
+              刷新状态
+            </Button>
+          </div>
+          {['核心服务', '可观测性'].map((category) => (
+            <div key={category}>
+              <div className="text-xs text-text-muted mb-2 uppercase tracking-wide">{category}</div>
+              <div className="grid grid-cols-2 gap-3">
+                {ALL_SERVICES.filter(s => s.category === category).map((svc) => {
+                  const status = serviceStatus[svc.name];
+                  const hasProxy = !!svc.proxyUrl;
+                  return (
+                    <Card
+                      key={svc.name}
+                      size="small"
+                      className={`!bg-bg-card !border-white/5 transition-colors ${hasProxy ? 'hover:!border-primary/30 cursor-pointer' : ''}`}
+                      onClick={() => hasProxy && openService(svc)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
+                            style={{ backgroundColor: `${svc.color}20`, color: svc.color }}
+                          >
+                            {svc.icon}
+                          </div>
+                          <div>
+                            <Text className="!text-text-primary text-sm font-medium block">{svc.name}</Text>
+                            <Text className="!text-text-muted text-[11px] block">{svc.desc}</Text>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <Badge
+                            status={status === 'online' ? 'success' : status === 'checking' ? 'processing' : 'default'}
+                            text={
+                              <span className="text-[11px] text-text-muted">
+                                {status === 'online' ? '在线' : status === 'checking' ? '检测中' : status === 'offline' ? '离线' : '—'}
+                              </span>
+                            }
+                          />
+                          <div className="mt-1 flex items-center gap-1">
+                            <Text code className="!text-[10px] !text-primary">:{svc.port}</Text>
+                            {hasProxy && (
+                              <Tag color="cyan" className="!text-[9px] !px-1 !py-0 !m-0 !leading-none">代理</Tag>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ),
+    },
     {
       key: 'jaeger',
       label: (
@@ -136,13 +244,13 @@ export default function MonitorPage() {
               type="primary"
               size="large"
               icon={<LinkOutlined />}
-              onClick={() => window.open('http://localhost:16686', '_blank')}
+              onClick={() => window.open('/api/jaeger', '_blank')}
               className="!px-8 !h-12 !text-base"
             >
               打开 Jaeger UI
             </Button>
             <div className="text-text-muted text-xs mt-2">
-              在新标签页中打开，可查看完整交互式追踪界面
+              通过 Next.js 代理访问，无需直接连 localhost
             </div>
           </div>
         </div>
@@ -159,22 +267,16 @@ export default function MonitorPage() {
       children: (
         <div className="space-y-4">
           <div className="flex gap-3 items-center">
-            <Search
-              placeholder="输入 Trace ID 或搜索..."
-              allowClear
-              enterButton="搜索"
-              size="middle"
-              className="max-w-md"
-              onSearch={(v) => searchTraces(v)}
-              loading={traceSearchLoading}
-            />
-            <Button
-              icon={<ThunderboltOutlined />}
-              onClick={() => searchTraces()}
-              loading={traceSearchLoading}
-            >
-              查看最近 Traces
-            </Button>
+            <Space>
+              <Button
+                icon={<ThunderboltOutlined />}
+                onClick={() => searchTraces()}
+                loading={traceSearchLoading}
+                type="primary"
+              >
+                查看最近 Traces
+              </Button>
+            </Space>
           </div>
 
           {searchError && (
@@ -205,7 +307,7 @@ export default function MonitorPage() {
                         size="small"
                         icon={<LinkOutlined />}
                         className="!text-primary !p-0"
-                        onClick={() => window.open(`http://localhost:16686/trace/${trace.trace_id}`, '_blank')}
+                        onClick={() => window.open(`/api/jaeger/trace/${trace.trace_id}`, '_blank')}
                       >
                         在 Jaeger 中查看
                       </Button>
@@ -233,14 +335,12 @@ export default function MonitorPage() {
                               {evt.fields.reasoning_content && (
                                 <div className="text-text-muted mb-0.5">
                                   💭 AI推理: {evt.fields.reasoning_content.slice(0, 150)}
-                                  {evt.fields.reasoning_content.length > 150 ? '...' : ''}
                                 </div>
                               )}
                               {evt.fields.decision_type && (
                                 <div className="text-info mb-0.5">
                                   🎯 决策: {evt.fields.decision_type}
                                   {evt.fields.tool_name && ` → ${evt.fields.tool_name}`}
-                                  {evt.fields.answer_preview && `: ${evt.fields.answer_preview.slice(0, 80)}`}
                                 </div>
                               )}
                               {evt.fields.result_preview && (
@@ -258,16 +358,6 @@ export default function MonitorPage() {
                                   🔀 路由: → {evt.fields.routed_scenario} ({evt.fields.reason || ''})
                                 </div>
                               )}
-                              {evt.fields.tool_chain && (
-                                <div className="text-text-secondary mb-0.5">
-                                  🔗 调用链: {evt.fields.tool_chain}
-                                </div>
-                              )}
-                              {evt.fields.test_name && evt.fields.task_id && (
-                                <div className="text-text-secondary mb-0.5">
-                                  ⚡ 压测: {evt.fields.test_name} task={evt.fields.task_id.slice(0, 12)}...
-                                </div>
-                              )}
                             </div>
                           ))}
                         </div>
@@ -278,10 +368,7 @@ export default function MonitorPage() {
             />
           ) : (
             !searchError && (
-              <Empty
-                description="点击「查看最近 Traces」搜索"
-                className="mt-8"
-              />
+              <Empty description="点击「查看最近 Traces」搜索" className="mt-8" />
             )
           )}
         </div>
@@ -292,7 +379,7 @@ export default function MonitorPage() {
       label: (
         <span className="flex items-center gap-2">
           <EyeOutlined />
-          Grafana 监控看板
+          Grafana
         </span>
       ),
       children: (
@@ -309,7 +396,7 @@ export default function MonitorPage() {
               type="primary"
               size="large"
               icon={<LinkOutlined />}
-              onClick={() => window.open('http://localhost:3000', '_blank')}
+              onClick={() => window.open('/api/grafana', '_blank')}
               className="!px-8 !h-12 !text-base"
             >
               打开 Grafana
@@ -340,7 +427,7 @@ export default function MonitorPage() {
               type="primary"
               size="large"
               icon={<LinkOutlined />}
-              onClick={() => window.open('http://localhost:8428/vmui', '_blank')}
+              onClick={() => window.open('/api/vm/vmui', '_blank')}
               className="!px-8 !h-12 !text-base"
             >
               打开 VictoriaMetrics
@@ -359,49 +446,13 @@ export default function MonitorPage() {
         </h2>
         <Space>
           <Tag icon={<CheckCircleOutlined />} color="success">
-            OTel Collector
+            OTel
           </Tag>
           <Tag icon={<CheckCircleOutlined />} color="success">
             Jaeger
           </Tag>
           <Tag color="processing">Grafana</Tag>
         </Space>
-      </div>
-
-      {/* 服务状态卡片 */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        {[
-          { name: 'OTel Collector', url: 'localhost:4317', status: 'running' },
-          { name: 'Jaeger UI', url: 'localhost:16686', status: 'running' },
-          { name: 'Grafana', url: 'localhost:3000', status: 'running' },
-          { name: 'VictoriaMetrics', url: 'localhost:8428', status: 'running' },
-        ].map((svc) => (
-          <Card
-            key={svc.name}
-            size="small"
-            className="!bg-bg-card !border-white/5"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <Text className="!text-text-secondary text-xs">{svc.name}</Text>
-                <div className="flex items-center gap-1 mt-1">
-                  <LinkOutlined className="text-text-muted text-xs" />
-                  <Text code className="!text-primary text-xs">
-                    {svc.url}
-                  </Text>
-                </div>
-              </div>
-              <Badge
-                status={svc.status === 'running' ? 'success' : 'default'}
-                text={
-                  <span className="text-xs text-text-secondary">
-                    {svc.status === 'running' ? '运行中' : '未启动'}
-                  </span>
-                }
-              />
-            </div>
-          </Card>
-        ))}
       </div>
 
       <Tabs

@@ -35,6 +35,16 @@ class DeployAgentTool(BaseTool):
                 "type": "string",
                 "description": "Perfa 安装目录",
                 "default": "/opt/perfa"
+            },
+            "force_reinstall": {
+                "type": "boolean",
+                "description": "已部署时是否强制重装 Agent",
+                "default": False
+            },
+            "agent_only": {
+                "type": "boolean",
+                "description": "仅重装 node_agent，不重启 VM/Grafana",
+                "default": False
             }
         },
         "required": ["server_id"]
@@ -158,8 +168,42 @@ class DeployAgentTool(BaseTool):
         
         result = subprocess.run(rsync_cmd, capture_output=True, text=True, timeout=300)
         return result.returncode == 0, result.stderr
+
+    def _restart_agent_only(self, client: paramiko.SSHClient, install_dir: str) -> tuple[int, str, str]:
+        """仅重装并重启 node_agent，避免每次带上整套监控栈"""
+        command = (
+            f"cd {install_dir}/src/node_agent && "
+            f"pip3 install -q -r requirements.txt 2>/dev/null || "
+            f"pip3 install -q flask prometheus-client psutil pydantic requests && "
+            f"pkill -f '[p]ython3 main.py' || true && "
+            f"sleep 2 && "
+            f"setsid python3 main.py >/tmp/agent.log 2>&1 < /dev/null &"
+        )
+        stdin, stdout, stderr = client.exec_command(command, timeout=180)
+        output = stdout.read().decode()
+        error_output = stderr.read().decode()
+        exit_code = stdout.channel.recv_exit_status()
+        return exit_code, output, error_output
+
+    def _wait_for_agent_health(self, server, attempts: int = 12, interval_sec: int = 5) -> bool:
+        """轮询等待 Agent 健康检查通过，避免重启后短暂未就绪就误判失败"""
+        client = AgentClient(f"http://{server.ip}:8080", timeout=10)
+        for attempt in range(1, attempts + 1):
+            if client.health_check():
+                logger.info(f"[部署Agent] Agent 健康检查通过 (attempt={attempt})")
+                return True
+            logger.warning(f"[部署Agent] Agent 尚未就绪，{interval_sec}秒后重试 (attempt={attempt}/{attempts})")
+            time.sleep(interval_sec)
+        return False
     
-    def execute(self, server_id: str, install_dir: str = DEFAULT_INSTALL_DIR, **kwargs) -> Dict[str, Any]:
+    def execute(
+        self,
+        server_id: str,
+        install_dir: str = DEFAULT_INSTALL_DIR,
+        force_reinstall: bool = False,
+        agent_only: bool = False,
+        **kwargs
+    ) -> Dict[str, Any]:
         """部署监控栈"""
         logger.info(f"[部署Agent] 开始部署 - 服务器ID: {server_id}, 安装目录: {install_dir}")
         
@@ -168,15 +212,17 @@ class DeployAgentTool(BaseTool):
             logger.error(f"[部署Agent] 服务器不存在: {server_id}")
             return {"success": False, "error": f"服务器 {server_id} 不存在"}
         
-        if server.agent_id:
+        is_reinstall = bool(server.agent_id)
+        if is_reinstall and not force_reinstall:
             logger.warning(f"[部署Agent] 服务器已部署: {server_id}, agent_id: {server.agent_id}")
             return {
                 "success": False,
-                "error": f"服务器已部署 (agent_id: {server.agent_id})",
-                "agent_id": server.agent_id
+                "error": f"服务器已部署 (agent_id: {server.agent_id})，如需重装请传 force_reinstall=true",
+                "agent_id": server.agent_id,
+                "can_reinstall": True
             }
         
-        agent_id = str(uuid.uuid4())
+        agent_id = server.agent_id or str(uuid.uuid4())
         logger.info(f"[部署Agent] 生成Agent ID: {agent_id}")
         
         try:
@@ -219,19 +265,21 @@ class DeployAgentTool(BaseTool):
                 f"pip3 install -q flask prometheus-client psutil pydantic requests"
             )[1].channel.recv_exit_status()
             
-            # 6. 调用 start-all.sh
-            logger.info(f"[部署Agent] 步骤6: 调用启动脚本 start-all.sh")
-            # 修改 start-all.sh 中的 PROJECT_DIR
-            stdin, stdout, stderr = client.exec_command(
-                f"cd {install_dir} && "
-                f"sed -i 's|/home/ubuntu/Perfa|{install_dir}|g' deploy/start-all.sh && "
-                f"chmod +x deploy/start-all.sh && "
-                f"bash deploy/start-all.sh",
-                timeout=180
-            )
-            
-            output = stdout.read().decode()
-            exit_code = stdout.channel.recv_exit_status()
+            if agent_only:
+                logger.info(f"[部署Agent] 步骤6: 仅重装并重启 node_agent")
+                exit_code, output, error_output = self._restart_agent_only(client, install_dir)
+            else:
+                logger.info(f"[部署Agent] 步骤6: 调用启动脚本 start-all.sh")
+                stdin, stdout, stderr = client.exec_command(
+                    f"cd {install_dir} && "
+                    f"sed -i 's|/home/ubuntu/Perfa|{install_dir}|g' deploy/start-all.sh && "
+                    f"chmod +x deploy/start-all.sh && "
+                    f"bash deploy/start-all.sh",
+                    timeout=180
+                )
+                output = stdout.read().decode()
+                error_output = stderr.read().decode()
+                exit_code = stdout.channel.recv_exit_status()
             logger.info(f"[部署Agent] 启动脚本执行完成, 退出码: {exit_code}")
             logger.debug(f"[部署Agent] 启动脚本输出: {output[:500]}")
             client.close()
@@ -241,15 +289,13 @@ class DeployAgentTool(BaseTool):
                 return {
                     "success": False,
                     "error": "启动脚本执行失败",
-                    "output": output
+                    "output": output,
+                    "stderr": error_output
                 }
             
             # 7. 验证 Agent 状态
             logger.info(f"[部署Agent] 步骤7: 验证Agent状态")
-            time.sleep(5)
-            client = AgentClient(f"http://{server.ip}:8080", timeout=10)
-            
-            if not client.health_check():
+            if not self._wait_for_agent_health(server):
                 logger.error(f"[部署Agent] Agent健康检查失败")
                 return {
                     "success": False,
@@ -270,7 +316,8 @@ class DeployAgentTool(BaseTool):
             return {
                 "success": True,
                 "agent_id": agent_id,
-                "message": "监控栈部署成功",
+                "message": "Agent 重装成功" if is_reinstall else "监控栈部署成功",
+                "reinstalled": is_reinstall,
                 "services": {
                     "agent": f"http://{server.ip}:8080",
                     "grafana": f"http://{server.ip}:3000",

@@ -16,9 +16,27 @@ export interface ServerInfo {
   server_id: string;
   ip: string;
   alias?: string;
-  status: 'online' | 'offline';
+  status: 'online' | 'offline' | 'unknown';
   tags?: string[];
   hardware?: Record<string, any>;
+  agent_id?: string | null;
+  agent_port?: number | null;
+  agent_status?: string | null;
+  agent_version?: string | null;
+  current_task?: Record<string, any> | null;
+}
+
+export interface AgentActionResult {
+  success: boolean;
+  error?: string;
+  data?: {
+    success?: boolean;
+    error?: string;
+    message?: string;
+    agent_id?: string;
+    reinstalled?: boolean;
+    services?: Record<string, string>;
+  };
 }
 
 export interface WorkflowStatus {
@@ -35,6 +53,30 @@ export interface ReportInfo {
   created_at: string;
   status: string;
   summary?: string;
+}
+
+export interface SessionSummary {
+  session_id: string;
+  title: string;
+  message_count: number;
+  created_at?: string;
+  last_active?: string;
+  last_user_message?: string;
+}
+
+export interface SessionDetail {
+  session_id: string;
+  title: string;
+  message_count: number;
+  created_at?: string;
+  last_active?: string;
+  last_user_message?: string;
+  messages: Array<{
+    role: 'user' | 'assistant' | 'system' | 'tool';
+    content: string;
+    timestamp?: string;
+    metadata?: Record<string, any>;
+  }>;
 }
 
 /** 非流式对话 */
@@ -87,6 +129,40 @@ export async function listServers(): Promise<ServerInfo[]> {
   return data.servers || [];
 }
 
+export async function deployServerAgent(
+  serverId: string,
+  options?: { forceReinstall?: boolean; agentOnly?: boolean }
+): Promise<AgentActionResult> {
+  const res = await fetch(`${API_BASE}/v1/servers/${serverId}/agent/deploy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      force_reinstall: options?.forceReinstall ?? false,
+      agent_only: options?.agentOnly ?? true,
+    }),
+  });
+  return res.json();
+}
+
+export async function uninstallServerAgent(
+  serverId: string,
+  options?: { keepData?: boolean }
+): Promise<AgentActionResult> {
+  const res = await fetch(`${API_BASE}/v1/servers/${serverId}/agent/uninstall`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      keep_data: options?.keepData ?? true,
+    }),
+  });
+  return res.json();
+}
+
+export async function getServerAgentStatus(serverId: string): Promise<AgentActionResult> {
+  const res = await fetch(`${API_BASE}/v1/servers/${serverId}/agent/status`);
+  return res.json();
+}
+
 /** 获取报告列表 */
 export async function listReports(): Promise<ReportInfo[]> {
   const res = await fetch(`${API_BASE}/v1/reports`);
@@ -100,4 +176,25 @@ export async function getReport(id: string): Promise<any> {
   const res = await fetch(`${API_BASE}/v1/reports/${id}`);
   if (!res.ok) throw new Error(`Report not found: ${id}`);
   return res.json();
+}
+
+/** 获取真实会话列表 */
+export async function listSessions(): Promise<SessionSummary[]> {
+  const res = await fetch(`${API_BASE}/v1/sessions`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.sessions || [];
+}
+
+/** 获取单个会话完整历史 */
+export async function getSession(sessionId: string): Promise<SessionDetail> {
+  const res = await fetch(`${API_BASE}/v1/sessions/${sessionId}`);
+  if (!res.ok) throw new Error(`Session not found: ${sessionId}`);
+  return res.json();
+}
+
+/** 删除单个会话 */
+export async function deleteSession(sessionId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/v1/sessions/${sessionId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete session: ${sessionId}`);
 }

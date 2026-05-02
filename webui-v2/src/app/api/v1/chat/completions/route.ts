@@ -5,6 +5,9 @@
  * 此 API Route 直接将请求转发到后端，并以 ReadableStream 方式实时回传。
  */
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:10000';
 
 export async function POST(request: Request) {
@@ -16,6 +19,7 @@ export async function POST(request: Request) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: request.signal,
   });
 
   if (!res.ok) {
@@ -61,6 +65,7 @@ export async function POST(request: Request) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Content-Encoding': 'none',
       'X-Accel-Buffering': 'no', // 防止 nginx 缓冲
     },
   });

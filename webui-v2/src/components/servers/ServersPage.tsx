@@ -7,9 +7,9 @@ import {
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, ReloadOutlined,
-  DesktopOutlined, KeyOutlined, UserOutlined, CloudServerOutlined
+  DesktopOutlined, KeyOutlined, UserOutlined, CloudServerOutlined, RocketOutlined
 } from '@ant-design/icons';
-import { listServers, ServerInfo } from '@/lib/api';
+import { deployServerAgent, listServers, ServerInfo, uninstallServerAgent } from '@/lib/api';
 
 const { Text, Paragraph } = Typography;
 
@@ -32,6 +32,7 @@ interface RegisterFormValues {
 export default function ServersPage() {
   const [servers, setServers] = useState<ServerInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [agentActionLoading, setAgentActionLoading] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<ServerInfo | null>(null);
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [registerLoading, setRegisterLoading] = useState(false);
@@ -46,6 +47,10 @@ export default function ServersPage() {
     try {
       const data = await listServers();
       setServers(data);
+      setSelected((prev) => {
+        if (!prev) return prev;
+        return data.find((server) => server.server_id === prev.server_id) || null;
+      });
     } catch {
       setServers([]);
     } finally {
@@ -101,6 +106,66 @@ export default function ServersPage() {
     }
   };
 
+  const setServerActionLoading = (serverId: string, value: boolean) => {
+    setAgentActionLoading((prev) => ({ ...prev, [serverId]: value }));
+  };
+
+  const handleDeployAgent = async (server: ServerInfo, forceReinstall = false) => {
+    setServerActionLoading(server.server_id, true);
+    try {
+      const data = await deployServerAgent(server.server_id, {
+        forceReinstall,
+        agentOnly: true,
+      });
+      if (data.success) {
+        message.success(forceReinstall ? 'Agent 重装任务已提交' : 'Agent 安装任务已提交');
+        await loadServers();
+      } else {
+        message.error(data.error || 'Agent 部署失败');
+      }
+    } catch (err: any) {
+      message.error(`Agent 部署失败: ${err.message}`);
+    } finally {
+      setServerActionLoading(server.server_id, false);
+    }
+  };
+
+  const handleUninstallAgent = async (server: ServerInfo) => {
+    setServerActionLoading(server.server_id, true);
+    try {
+      const data = await uninstallServerAgent(server.server_id, { keepData: true });
+      if (data.success) {
+        message.success('Agent 已卸载');
+        await loadServers();
+        if (selected?.server_id === server.server_id) {
+          setSelected({ ...server, agent_id: null, agent_status: 'not_deployed', agent_port: null });
+        }
+      } else {
+        message.error(data.error || 'Agent 卸载失败');
+      }
+    } catch (err: any) {
+      message.error(`Agent 卸载失败: ${err.message}`);
+    } finally {
+      setServerActionLoading(server.server_id, false);
+    }
+  };
+
+  const renderAgentStatus = (server: ServerInfo) => {
+    if (!server.agent_id || server.agent_status === 'not_deployed') {
+      return <Tag>未安装</Tag>;
+    }
+    if (server.agent_status === 'online' || server.agent_status === 'running') {
+      return <Tag color="green">运行中</Tag>;
+    }
+    if (server.agent_status === 'offline' || server.agent_status === 'stopped') {
+      return <Tag color="orange">已部署但离线</Tag>;
+    }
+    if (server.agent_status === 'error') {
+      return <Tag color="red">异常</Tag>;
+    }
+    return <Tag color="blue">{server.agent_status || '已部署'}</Tag>;
+  };
+
   const columns = [
     {
       title: 'IP',
@@ -124,6 +189,11 @@ export default function ServersPage() {
       },
     },
     {
+      title: 'Agent',
+      key: 'agent_status',
+      render: (_: any, record: ServerInfo) => renderAgentStatus(record),
+    },
+    {
       title: '标签',
       dataIndex: 'tags',
       key: 'tags',
@@ -134,14 +204,46 @@ export default function ServersPage() {
       title: '操作',
       key: 'action',
       render: (_: any, record: ServerInfo) => (
-        <Popconfirm
-          title="确认移除该服务器？"
-          onConfirm={() => handleRemove(record.server_id)}
-          okText="确认"
-          cancelText="取消"
-        >
-          <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-        </Popconfirm>
+        <Space size="small" onClick={(e) => e.stopPropagation()}>
+          {!record.agent_id || record.agent_status === 'not_deployed' ? (
+            <Button
+              size="small"
+              icon={<RocketOutlined />}
+              loading={agentActionLoading[record.server_id]}
+              onClick={() => handleDeployAgent(record, false)}
+            >
+              安装 Agent
+            </Button>
+          ) : (
+            <>
+              <Button
+                size="small"
+                loading={agentActionLoading[record.server_id]}
+                onClick={() => handleDeployAgent(record, true)}
+              >
+                重装 Agent
+              </Button>
+              <Popconfirm
+                title="确认卸载该服务器上的 Agent？"
+                onConfirm={() => handleUninstallAgent(record)}
+                okText="确认"
+                cancelText="取消"
+              >
+                <Button size="small" danger loading={agentActionLoading[record.server_id]}>
+                  卸载 Agent
+                </Button>
+              </Popconfirm>
+            </>
+          )}
+          <Popconfirm
+            title="确认移除该服务器？"
+            onConfirm={() => handleRemove(record.server_id)}
+            okText="确认"
+            cancelText="取消"
+          >
+            <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -216,6 +318,28 @@ export default function ServersPage() {
                 />
               </div>
             </div>
+            <div>
+              <Text className="!text-text-muted">Agent 部署</Text>
+              <div className="mt-1">{renderAgentStatus(selected)}</div>
+              {selected.agent_id && (
+                <div className="mt-2">
+                  <Text code className="!text-xs !text-primary">{selected.agent_id}</Text>
+                </div>
+              )}
+              {selected.agent_version && (
+                <div className="mt-1">
+                  <Text className="!text-text-secondary text-xs">版本 {selected.agent_version}</Text>
+                </div>
+              )}
+            </div>
+            {selected.current_task && (
+              <div>
+                <Text className="!text-text-muted">当前任务</Text>
+                <pre className="mt-1 text-xs bg-bg-main p-3 rounded-lg overflow-auto max-h-40">
+                  {JSON.stringify(selected.current_task, null, 2)}
+                </pre>
+              </div>
+            )}
             {selected.hardware && (
               <div>
                 <Text className="!text-text-muted">硬件信息</Text>
@@ -225,12 +349,41 @@ export default function ServersPage() {
               </div>
             )}
             <div className="pt-4 border-t border-white/10">
-              <Popconfirm
-                title="确认移除该服务器？"
-                onConfirm={() => handleRemove(selected.server_id)}
-              >
-                <Button danger icon={<DeleteOutlined />}>移除服务器</Button>
-              </Popconfirm>
+              <Space wrap>
+                {!selected.agent_id || selected.agent_status === 'not_deployed' ? (
+                  <Button
+                    type="primary"
+                    icon={<RocketOutlined />}
+                    loading={agentActionLoading[selected.server_id]}
+                    onClick={() => handleDeployAgent(selected, false)}
+                  >
+                    安装 Agent
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      loading={agentActionLoading[selected.server_id]}
+                      onClick={() => handleDeployAgent(selected, true)}
+                    >
+                      重装 Agent
+                    </Button>
+                    <Popconfirm
+                      title="确认卸载该服务器上的 Agent？"
+                      onConfirm={() => handleUninstallAgent(selected)}
+                    >
+                      <Button danger loading={agentActionLoading[selected.server_id]}>
+                        卸载 Agent
+                      </Button>
+                    </Popconfirm>
+                  </>
+                )}
+                <Popconfirm
+                  title="确认移除该服务器？"
+                  onConfirm={() => handleRemove(selected.server_id)}
+                >
+                  <Button danger icon={<DeleteOutlined />}>移除服务器</Button>
+                </Popconfirm>
+              </Space>
             </div>
           </div>
         )}
