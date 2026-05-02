@@ -19,11 +19,15 @@ LOCAL_PERFA_DIR = "/home/ubuntu/Perfa"
 DEFAULT_INSTALL_DIR = "/opt/perfa"
 
 
+REMOTE_INFRA_START_SCRIPT = "ops/scripts/start-local-infra.sh"
+REMOTE_INFRA_STOP_SCRIPT = "ops/scripts/stop-local-infra.sh"
+
+
 class DeployAgentTool(BaseTool):
-    """部署 Agent - 传输项目并调用 start-all.sh"""
+    """部署 Agent - 传输项目并调用本地基础设施启动脚本"""
     
     name = "deploy_agent"
-    description = "部署完整监控栈到目标服务器（传输代码、检查环境、调用 start-all.sh 启动 VM + Grafana + Agent）"
+    description = "部署完整监控栈到目标服务器（传输代码、检查环境、调用统一基础设施脚本启动 VM + Grafana + Agent）"
     input_schema = {
         "type": "object",
         "properties": {
@@ -269,12 +273,12 @@ class DeployAgentTool(BaseTool):
                 logger.info(f"[部署Agent] 步骤6: 仅重装并重启 node_agent")
                 exit_code, output, error_output = self._restart_agent_only(client, install_dir)
             else:
-                logger.info(f"[部署Agent] 步骤6: 调用启动脚本 start-all.sh")
+                logger.info(f"[部署Agent] 步骤6: 调用启动脚本 {REMOTE_INFRA_START_SCRIPT}")
                 stdin, stdout, stderr = client.exec_command(
                     f"cd {install_dir} && "
-                    f"sed -i 's|/home/ubuntu/Perfa|{install_dir}|g' deploy/start-all.sh && "
-                    f"chmod +x deploy/start-all.sh && "
-                    f"bash deploy/start-all.sh",
+                    f"sed -i 's|/home/ubuntu/Perfa|{install_dir}|g' {REMOTE_INFRA_START_SCRIPT} && "
+                    f"chmod +x {REMOTE_INFRA_START_SCRIPT} && "
+                    f"bash {REMOTE_INFRA_START_SCRIPT}",
                     timeout=180
                 )
                 output = stdout.read().decode()
@@ -505,7 +509,7 @@ class ConfigureAgentTool(BaseTool):
 
 
 class UninstallAgentTool(BaseTool):
-    """卸载 Agent - 调用 stop-all.sh"""
+    """卸载 Agent - 调用统一基础设施停止脚本"""
     
     name = "uninstall_agent"
     description = "停止所有服务（VM + Grafana + Agent）"
@@ -578,7 +582,7 @@ class UninstallAgentTool(BaseTool):
             raise
     
     def execute(self, server_id: str, keep_data: bool = True, **kwargs) -> Dict[str, Any]:
-        """调用 stop-all.sh 停止所有服务"""
+        """调用统一基础设施停止脚本停止所有服务"""
         server = self.db.get_server(server_id)
         if not server:
             return {"success": False, "error": f"服务器 {server_id} 不存在"}
@@ -592,12 +596,12 @@ class UninstallAgentTool(BaseTool):
         try:
             client = self._ssh_connect(server)
             
-            # 调用 stop-all.sh
+            # 调用统一基础设施停止脚本
             stdin, stdout, stderr = client.exec_command(
                 f"cd {install_dir} && "
-                f"sed -i 's|/home/ubuntu/Perfa|{install_dir}|g' deploy/stop-all.sh 2>/dev/null || true && "
-                f"chmod +x deploy/stop-all.sh 2>/dev/null || true && "
-                f"bash deploy/stop-all.sh",
+                f"sed -i 's|/home/ubuntu/Perfa|{install_dir}|g' {REMOTE_INFRA_STOP_SCRIPT} 2>/dev/null || true && "
+                f"chmod +x {REMOTE_INFRA_STOP_SCRIPT} 2>/dev/null || true && "
+                f"bash {REMOTE_INFRA_STOP_SCRIPT}",
                 timeout=60
             )
             

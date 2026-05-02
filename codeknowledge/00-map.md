@@ -14,7 +14,7 @@ Perfa 是一个面向服务器性能测试的多组件系统：
 ```text
 Perfa/
 ├── codeknowledge/        # 统一知识库
-├── deploy/               # 本地部署、监控栈、Grafana、OTel
+├── ops/                  # 统一的运行、部署、compose 与运维资源
 ├── doc/                  # 历史方案文档、升级记录
 ├── src/
 │   ├── node_agent/       # 被测节点守护进程
@@ -63,9 +63,11 @@ Perfa/
 
 ## 当前代码中的辅助目录
 
-- `deploy/vm/` - VictoriaMetrics 抓取配置
-- `deploy/grafana/` - Grafana docker compose、dashboard、datasource provisioning
-- `deploy/otel/` - OTel Collector 与 Jaeger 配置
+- `ops/assets/vm/` - VictoriaMetrics 抓取配置
+- `ops/assets/grafana/` - Grafana dashboard 与 provisioning 资源
+- `ops/assets/otel/` - OTel Collector 配置
+- `ops/compose/` - Compose 文件
+- `ops/scripts/` - 启动、停止、状态与部署脚本
 - `src/mcp_server/examples/` - Cursor 和 VSCode 的 MCP 配置示例
 - `test/node_agent/` - Node Agent 接口测试脚本
 

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  chatgpt-web:
+    image: yidadaa/chatgpt-next-web:latest
+    container_name: perfa-chatgpt-web
+    ports:
+      - "3001:3000"
+    environment:
+      - OPENAI_API_KEY=any-key
+      - BASE_URL=http://host.docker.internal:10000
+      - CODE=
+      - HIDE_USER_API_KEY=1
+      - DISABLE_GPT4=1
+      - ENABLE_BALANCE_QUERY=0
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

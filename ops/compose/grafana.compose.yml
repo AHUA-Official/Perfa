@@ -12,7 +12,12 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana-storage:/var/lib/grafana
+      - ../assets/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ../assets/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ../assets/grafana/dashboards:/var/lib/grafana/dashboards
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   grafana-storage:

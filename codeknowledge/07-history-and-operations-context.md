@@ -146,7 +146,7 @@ AI IDE -> MCP Server -> LangChain Agent -> SSH 执行器 -> 目标服务器
 - `src/langchain_agent/observability/`
 - `src/langchain_agent/backend/`
 - `webui-v2/`
-- `deploy/otel/`
+- `ops/assets/otel/`
 
 如果你在追代码演进，优先从这些目录看起。
 

@@ -13,7 +13,7 @@
 
 ## 现有脚本
 
-### `deploy/start-all.sh`
+### `ops/scripts/start-local-infra.sh`
 
 这是面向本地全栈中“监控栈 + Node Agent”的脚本，当前会：
 
@@ -29,7 +29,7 @@
 - LangChain Agent API
 - Web UI V2
 
-### `deploy/status.sh`
+### `ops/scripts/status-local-infra.sh`
 
 用于查看：
 
@@ -51,19 +51,16 @@
 ```bash
 # 1. 监控栈 + Node Agent
 cd /home/ubuntu/Perfa/deploy
-./start-all.sh
+bash /home/ubuntu/Perfa/ops/scripts/start-local-infra.sh
 
 # 2. MCP Server
-cd /home/ubuntu/Perfa/src/mcp_server
-python3 main.py
+bash /home/ubuntu/Perfa/ops/scripts/start-mcp-server.sh
 
 # 3. LangChain Agent API
-cd /home/ubuntu/Perfa/src
-python3 -c "import uvicorn; from langchain_agent.backend.main import app, API_PORT; uvicorn.run(app, host='0.0.0.0', port=API_PORT)"
+bash /home/ubuntu/Perfa/ops/scripts/start-langchain-backend.sh
 
 # 4. Web UI V2
-cd /home/ubuntu/Perfa/webui-v2
-npm run dev
+bash /home/ubuntu/Perfa/ops/scripts/start-webui-v2.sh
 ```
 
 ## 远程 / 混合部署现实
@@ -82,7 +79,7 @@ npm run dev
 
 ## OTel 部署
 
-`deploy/otel/` 已经具备 Collector 和 Jaeger 配置，但是否启用取决于当前联调环境。
+`ops/assets/otel/` 与 `ops/compose/otel.compose.yml` 已经具备 Collector 和 Jaeger 配置，但是否启用取决于当前联调环境。
 
 如果要让追踪真正打通，还需要确保相关进程带上：
 
@@ -92,5 +89,5 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 
 ## 当前注意点
 
-- `deploy/start-all.sh` 会调用 `sudo docker`，适合本地运维启动，不适合作为纯开发脚本假设。
+- `ops/scripts/start-local-infra.sh` 会调用 `sudo docker`，适合本地运维启动，不适合作为纯开发脚本假设。
 - LangChain Agent 的启动路径要从 `src/` 层级进入，否则包导入可能不对。

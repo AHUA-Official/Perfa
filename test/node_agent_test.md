@@ -9,8 +9,7 @@
 ### 1.1 启动服务
 
 ```bash
-cd /home/ubuntu/Perfa/deploy
-./start-all.sh
+bash /home/ubuntu/Perfa/ops/scripts/start-local-infra.sh
 ```
 
 确认以下服务正常运行：
@@ -620,6 +619,5 @@ curl -X POST http://localhost:8080/api/storage/cleanup \
 ## 十、清理测试环境
 
 ```bash
-cd /home/ubuntu/Perfa/deploy
-./stop-all.sh
+bash /home/ubuntu/Perfa/ops/scripts/stop-local-infra.sh
 ```

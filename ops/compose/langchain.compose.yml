@@ -5,7 +5,7 @@ services:
     image: chromadb/chroma:latest
     container_name: perfa-chromadb
     ports:
-      - "8001:8000"  # 宿主机8001端口映射到容器8000端口
+      - "8001:8000"
     volumes:
       - chroma_data:/chroma/chroma_data
     environment:

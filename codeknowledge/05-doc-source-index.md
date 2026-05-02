@@ -66,4 +66,4 @@
 
 1. 把仓库根目录 README 重写成总入口，并链接 `codeknowledge/`
 2. 给 `node_agent`、`mcp_server`、`langchain_agent` 各补一个“接口清单”章节
-3. 给 `deploy/` 增加环境拓扑文档，明确本地与远程部署模式
+3. 给 `ops/` 增加环境拓扑文档，明确本地与远程部署模式
