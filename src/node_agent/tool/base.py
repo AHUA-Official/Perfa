@@ -8,6 +8,9 @@ import subprocess
 import shutil
 import logging
 from pathlib import Path
+import os
+
+from privilege import build_privileged_command, check_privilege_capability
 
 
 logger = logging.getLogger(__name__)
@@ -38,6 +41,7 @@ class BaseTool(ABC):
         self.category = category
         self.binary_path: Optional[str] = None
         self.version: Optional[str] = None
+        self.last_error: Optional[str] = None
         
         # 二进制文件存储路径
         self.binaries_dir = Path(__file__).parent / "binaries" / category
@@ -107,12 +111,14 @@ class BaseTool(ABC):
             (return_code, stdout, stderr)
         """
         try:
+            final_cmd, stdin_text = build_privileged_command(cmd, require_privilege=False)
             result = subprocess.run(
-                cmd,
+                final_cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                cwd=cwd
+                cwd=cwd,
+                input=stdin_text,
             )
             return result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
@@ -205,7 +211,14 @@ class BaseTool(ABC):
         """
         pm = self._get_package_manager()
         if not pm:
-            logger.error("No supported package manager found (apt/yum/dnf)")
+            self.last_error = "No supported package manager found (apt/yum/dnf)"
+            logger.error(self.last_error)
+            return False
+
+        can_run, reason = check_privilege_capability(require_privilege=True)
+        if not can_run:
+            self.last_error = reason
+            logger.error(reason)
             return False
         
         logger.info(f"Installing {package} via {pm}...")
@@ -216,26 +229,30 @@ class BaseTool(ABC):
                 logger.error(f"Failed to acquire apt lock after timeout. Another package manager is running. Please wait and try again.")
                 return False
             
-            returncode, stdout, stderr = self._run_command(
-                ["sudo", "apt-get", "install", "-y", package]
-            )
+            cmd, stdin_text = build_privileged_command(["apt-get", "install", "-y", package])
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, input=stdin_text)
+            returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
         elif pm == "dnf":
-            returncode, stdout, stderr = self._run_command(
-                ["sudo", "dnf", "install", "-y", package]
-            )
+            cmd, stdin_text = build_privileged_command(["dnf", "install", "-y", package])
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, input=stdin_text)
+            returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
         else:  # yum
-            returncode, stdout, stderr = self._run_command(
-                ["sudo", "yum", "install", "-y", package]
-            )
+            cmd, stdin_text = build_privileged_command(["yum", "install", "-y", package])
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, input=stdin_text)
+            returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
         
         if returncode == 0:
             logger.info(f"Successfully installed {package}")
+            self.last_error = None
             return True
         else:
             # 提供更友好的错误提示
             error_msg = stderr.strip() if stderr else "Unknown error"
             if "lock" in error_msg.lower():
                 error_msg = "Package manager is locked by another process. Please wait and try again."
+            elif "sudo" in error_msg.lower():
+                error_msg = f"{error_msg} (当前机器可能需要 root 或正确的 sudo 配置)"
+            self.last_error = error_msg
             logger.error(f"Failed to install {package}: {error_msg}")
             return False
 
@@ -251,7 +268,14 @@ class BaseTool(ABC):
         """
         pm = self._get_package_manager()
         if not pm:
-            logger.error("No supported package manager found (apt/yum/dnf)")
+            self.last_error = "No supported package manager found (apt/yum/dnf)"
+            logger.error(self.last_error)
+            return False
+
+        can_run, reason = check_privilege_capability(require_privilege=True)
+        if not can_run:
+            self.last_error = reason
+            logger.error(reason)
             return False
         
         logger.info(f"Removing {package} via {pm}...")
@@ -262,26 +286,30 @@ class BaseTool(ABC):
                 logger.error(f"Failed to acquire apt lock after timeout. Another package manager is running. Please wait and try again.")
                 return False
             
-            returncode, stdout, stderr = self._run_command(
-                ["sudo", "apt-get", "remove", "-y", package]
-            )
+            cmd, stdin_text = build_privileged_command(["apt-get", "remove", "-y", package])
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, input=stdin_text)
+            returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
         elif pm == "dnf":
-            returncode, stdout, stderr = self._run_command(
-                ["sudo", "dnf", "remove", "-y", package]
-            )
+            cmd, stdin_text = build_privileged_command(["dnf", "remove", "-y", package])
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, input=stdin_text)
+            returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
         else:  # yum
-            returncode, stdout, stderr = self._run_command(
-                ["sudo", "yum", "remove", "-y", package]
-            )
+            cmd, stdin_text = build_privileged_command(["yum", "remove", "-y", package])
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, input=stdin_text)
+            returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
         
         if returncode == 0:
             logger.info(f"Successfully removed {package}")
+            self.last_error = None
             return True
         else:
             # 提供更友好的错误提示
             error_msg = stderr.strip() if stderr else "Unknown error"
             if "lock" in error_msg.lower():
                 error_msg = "Package manager is locked by another process. Please wait and try again."
+            elif "sudo" in error_msg.lower():
+                error_msg = f"{error_msg} (当前机器可能需要 root 或正确的 sudo 配置)"
+            self.last_error = error_msg
             logger.error(f"Failed to remove {package}: {error_msg}")
             return False
     

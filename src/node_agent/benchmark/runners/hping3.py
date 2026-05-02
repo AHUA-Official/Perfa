@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional
 
 from .base import BaseRunner
 from ..task import BenchmarkTask
+from privilege import build_privileged_command
 
 
 class Hping3Runner(BaseRunner):
@@ -56,7 +57,7 @@ class Hping3Runner(BaseRunner):
         port = params.get("port", 80)
         count = params.get("count", 10)
         
-        cmd = ["sudo", self.binary_path]
+        cmd = [self.binary_path]
         
         if mode == "ping":
             # 普通ICMP ping
@@ -71,7 +72,8 @@ class Hping3Runner(BaseRunner):
             # 默认TCP ping
             cmd.extend(["-c", str(count), target])
         
-        return cmd
+        final_cmd, _ = build_privileged_command(cmd, require_privilege=True)
+        return final_cmd
     
     def collect_result(self, task: BenchmarkTask, output: str) -> Dict[str, Any]:
         """

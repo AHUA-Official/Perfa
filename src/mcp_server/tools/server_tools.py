@@ -41,6 +41,16 @@ class RegisterServerTool(BaseTool):
                 "type": "string",
                 "description": "SSH 私钥路径（可选）"
             },
+            "privilege_mode": {
+                "type": "string",
+                "description": "目标机提权模式",
+                "enum": ["root", "sudo_nopasswd", "sudo_password", "none"],
+                "default": "root"
+            },
+            "sudo_password": {
+                "type": "string",
+                "description": "sudo 密码（仅 privilege_mode=sudo_password 时使用）"
+            },
             "alias": {
                 "type": "string",
                 "description": "服务器别名"
@@ -60,6 +70,8 @@ class RegisterServerTool(BaseTool):
     def execute(self, ip: str, ssh_user: str, port: int = 22,
                 ssh_password: Optional[str] = None,
                 ssh_key_path: Optional[str] = None,
+                privilege_mode: str = "root",
+                sudo_password: Optional[str] = None,
                 alias: str = "", tags: list = None, **kwargs) -> Dict[str, Any]:
         """执行注册"""
         # 1. 测试 SSH 连接
@@ -137,6 +149,8 @@ class RegisterServerTool(BaseTool):
             ssh_user=ssh_user,
             ssh_password_encrypted=ssh_password,  # TODO: 加密
             ssh_key_path=ssh_key_path,
+            privilege_mode=privilege_mode,
+            sudo_password_encrypted=sudo_password,
             tags=tags or [],
             created_at=now,
             updated_at=now
@@ -178,6 +192,7 @@ class ListServersTool(BaseTool):
                     "alias": s.alias,
                     "agent_id": s.agent_id,
                     "agent_status": "deployed" if s.agent_id else "not_deployed",
+                    "privilege_mode": s.privilege_mode,
                     "tags": s.tags,
                     "created_at": s.created_at.isoformat()
                 }
@@ -261,6 +276,7 @@ class GetServerInfoTool(BaseTool):
                 "port": server.port,
                 "alias": server.alias,
                 "agent_id": server.agent_id,
+                "privilege_mode": server.privilege_mode,
                 "tags": server.tags
             },
             "hardware": None,
@@ -310,6 +326,15 @@ class UpdateServerInfoTool(BaseTool):
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "标签列表"
+            },
+            "privilege_mode": {
+                "type": "string",
+                "description": "目标机提权模式",
+                "enum": ["root", "sudo_nopasswd", "sudo_password", "none"]
+            },
+            "sudo_password": {
+                "type": "string",
+                "description": "sudo 密码（仅 privilege_mode=sudo_password 时使用）"
             }
         },
         "required": ["server_id"]
@@ -319,7 +344,9 @@ class UpdateServerInfoTool(BaseTool):
         self.db = db
     
     def execute(self, server_id: str, alias: Optional[str] = None,
-                tags: Optional[list] = None, **kwargs) -> Dict[str, Any]:
+                tags: Optional[list] = None,
+                privilege_mode: Optional[str] = None,
+                sudo_password: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """执行更新"""
         server = self.db.get_server(server_id)
         if not server:
@@ -333,6 +360,10 @@ class UpdateServerInfoTool(BaseTool):
             server.alias = alias
         if tags is not None:
             server.tags = tags
+        if privilege_mode is not None:
+            server.privilege_mode = privilege_mode
+        if sudo_password is not None:
+            server.sudo_password_encrypted = sudo_password
         
         server.updated_at = datetime.now()
         self.db.update_server(server)

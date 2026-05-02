@@ -13,6 +13,7 @@ import psutil
 from flask import Blueprint, request
 
 from ..responses import success, error_response, ErrorCodes
+from privilege import get_privilege_config, update_privilege_config
 
 bp = Blueprint('monitor', __name__)
 
@@ -426,6 +427,10 @@ def agent_config():
             config["max_concurrent_tasks"] = getattr(
                 agent.benchmark_executor, 'max_concurrent_tasks', 1
             )
+
+        privilege = get_privilege_config()
+        config["privilege_mode"] = privilege.mode
+        config["sudo_password_configured"] = bool(privilege.sudo_password)
         
         return success(config)
     
@@ -455,6 +460,14 @@ def agent_config():
         if agent and agent.monitor:
             agent.monitor.enabled_metrics = enabled_metrics
             updated["enabled_metrics"] = enabled_metrics
+
+    if 'privilege_mode' in data or 'sudo_password' in data:
+        privilege = update_privilege_config(
+            mode=data.get('privilege_mode'),
+            sudo_password=data.get('sudo_password'),
+        )
+        updated["privilege_mode"] = privilege.mode
+        updated["sudo_password_configured"] = bool(privilege.sudo_password)
     
     if not updated:
         return error_response(ErrorCodes.INVALID_PARAMS, "No valid config parameters provided")

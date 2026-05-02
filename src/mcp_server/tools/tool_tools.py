@@ -46,13 +46,18 @@ class InstallToolTool(BaseTool):
                 return {"success": False, "error": "Agent 离线"}
             
             # 调用安装 API
-            result = client.install_tool(tool_name)
+            result = client.install_tool(
+                tool_name,
+                privilege_mode=server.privilege_mode,
+                sudo_password=server.sudo_password_encrypted,
+            )
             
             return {
                 "success": True,
                 "message": f"工具 {tool_name} 安装成功",
                 "tool_name": tool_name,
-                "details": result
+                "details": result,
+                "privilege_mode": server.privilege_mode,
             }
             
         except Exception as e:
@@ -64,7 +69,12 @@ class InstallToolTool(BaseTool):
                     "error": f"工具 {tool_name} 安装失败，请检查依赖",
                     "details": error_msg
                 }
-            return {"success": False, "error": f"安装失败: {error_msg}"}
+            return {
+                "success": False,
+                "error": f"安装失败: {error_msg}",
+                "privilege_mode": server.privilege_mode,
+                "hint": "如果目标机不是 root，请确认 privilege_mode 和 sudo_password 配置正确"
+            }
 
 
 class UninstallToolTool(BaseTool):
@@ -106,13 +116,18 @@ class UninstallToolTool(BaseTool):
             if not client.health_check():
                 return {"success": False, "error": "Agent 离线"}
             
-            result = client.uninstall_tool(tool_name)
+            result = client.uninstall_tool(
+                tool_name,
+                privilege_mode=server.privilege_mode,
+                sudo_password=server.sudo_password_encrypted,
+            )
             
             return {
                 "success": True,
                 "message": f"工具 {tool_name} 已卸载",
                 "tool_name": tool_name,
-                "details": result
+                "details": result,
+                "privilege_mode": server.privilege_mode,
             }
             
         except Exception as e:

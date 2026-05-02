@@ -14,12 +14,14 @@ import signal
 import time
 import logging
 from typing import Optional
+import os
 from prometheus_client import start_http_server
 
 from monitor import Monitor
 from tool.manager import ToolManager
 from api.server import APIServer
 from benchmark.executor import BenchmarkExecutor
+from privilege import get_privilege_config
 
 # 配置日志
 logging.basicConfig(
@@ -60,6 +62,8 @@ class NodeAgent:
         logger.info(f"节点 Agent 初始化: {agent_id}")
         logger.info(f"指标端口: {metrics_port}")
         logger.info(f"API 端口: {api_port}")
+        privilege = get_privilege_config()
+        logger.info(f"权限模式: {privilege.mode}")
     
     def start(self):
         """启动 Agent"""
@@ -188,7 +192,6 @@ def main():
     # OTel: 初始化追踪（在所有其他导入之前）
     _otel_initialized = False
     try:
-        import os
         otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
         if otlp_endpoint:
             from opentelemetry import trace

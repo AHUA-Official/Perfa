@@ -127,6 +127,11 @@ class RunBenchmarkTool(BaseTool):
             # 检查 Agent 是否在线
             if not client.health_check():
                 return {"success": False, "error": "Agent 离线"}
+
+            client.update_config({
+                "privilege_mode": server.privilege_mode,
+                "sudo_password": server.sudo_password_encrypted,
+            })
             
             # 检查是否有任务在运行
             current_task = client.get_current_task()

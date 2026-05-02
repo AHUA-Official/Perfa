@@ -71,13 +71,27 @@ class AgentClient:
         """获取工具信息"""
         return self._request("GET", f"/api/tools/{tool_name}")
     
-    def install_tool(self, tool_name: str) -> Dict[str, Any]:
+    def install_tool(self, tool_name: str, privilege_mode: Optional[str] = None, sudo_password: Optional[str] = None) -> Dict[str, Any]:
         """安装工具"""
-        return self._request("POST", f"/api/tools/{tool_name}/install")
-    
-    def uninstall_tool(self, tool_name: str) -> Dict[str, Any]:
+        payload = {}
+        if privilege_mode is not None:
+            payload["privilege_mode"] = privilege_mode
+        if sudo_password is not None:
+            payload["sudo_password"] = sudo_password
+        return self._request("POST", f"/api/tools/{tool_name}/install", json=payload or None)
+
+    def uninstall_tool(self, tool_name: str, privilege_mode: Optional[str] = None, sudo_password: Optional[str] = None) -> Dict[str, Any]:
         """卸载工具"""
-        return self._request("POST", f"/api/tools/{tool_name}/uninstall")
+        payload = {}
+        if privilege_mode is not None:
+            payload["privilege_mode"] = privilege_mode
+        if sudo_password is not None:
+            payload["sudo_password"] = sudo_password
+        return self._request("POST", f"/api/tools/{tool_name}/uninstall", json=payload or None)
+
+    def update_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """更新 Agent 运行时配置"""
+        return self._request("POST", "/api/config", json=config)
     
     # Benchmark 管理
     

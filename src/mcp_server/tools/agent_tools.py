@@ -56,6 +56,21 @@ class DeployAgentTool(BaseTool):
     
     def __init__(self, db: Database):
         self.db = db
+
+    def _sync_agent_privilege_config(self, server) -> tuple[bool, Optional[str]]:
+        """将服务器权限配置同步到远端 Agent 运行时"""
+        try:
+            client = AgentClient(f"http://{server.ip}:{server.agent_port or 8080}", timeout=15)
+            if not client.health_check():
+                return False, "Agent 离线，无法同步权限配置"
+            payload = {
+                "privilege_mode": server.privilege_mode,
+                "sudo_password": server.sudo_password_encrypted,
+            }
+            client.update_config(payload)
+            return True, None
+        except Exception as e:
+            return False, str(e)
     
     def _ssh_connect(self, server) -> paramiko.SSHClient:
         """建立 SSH 连接"""
@@ -307,6 +322,16 @@ class DeployAgentTool(BaseTool):
                     "agent_id": agent_id
                 }
             logger.info(f"[部署Agent] Agent健康检查通过")
+
+            sync_ok, sync_error = self._sync_agent_privilege_config(server)
+            if not sync_ok:
+                logger.error(f"[部署Agent] 同步 Agent 权限配置失败: {sync_error}")
+                return {
+                    "success": False,
+                    "error": f"Agent 权限配置同步失败: {sync_error}",
+                    "agent_id": agent_id
+                }
+            logger.info("[部署Agent] Agent 权限配置同步完成")
             
             # 8. 更新数据库
             logger.info(f"[部署Agent] 步骤8: 更新数据库")
@@ -490,10 +515,16 @@ class ConfigureAgentTool(BaseTool):
         
         try:
             import requests
-            
+
+            merged_config = dict(config)
+            if "privilege_mode" not in merged_config:
+                merged_config["privilege_mode"] = server.privilege_mode
+            if "sudo_password" not in merged_config and server.sudo_password_encrypted is not None:
+                merged_config["sudo_password"] = server.sudo_password_encrypted
+
             response = requests.post(
                 f"http://{server.ip}:{server.agent_port}/api/config",
-                json=config,
+                json=merged_config,
                 timeout=30
             )
             response.raise_for_status()
@@ -501,7 +532,7 @@ class ConfigureAgentTool(BaseTool):
             return {
                 "success": True,
                 "message": "配置已更新",
-                "config": config
+                "config": merged_config
             }
             
         except Exception as e:

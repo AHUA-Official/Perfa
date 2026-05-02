@@ -3,14 +3,27 @@
 
 set -e
 
-echo "Node Agent:"
-curl -sS --max-time 5 http://127.0.0.1:8080/health || true
-echo ""
-echo "MCP Server:"
-curl -I -sS --max-time 5 "http://127.0.0.1:9000/sse?api_key=test-key-123" || true
-echo ""
-echo "LangChain Backend:"
-curl -sS --max-time 5 http://127.0.0.1:10000/health || true
-echo ""
-echo "WebUI V2:"
-curl -I -sS --max-time 5 http://127.0.0.1:3002 || true
+check_get() {
+    local name="$1"
+    local url="$2"
+    echo "$name:"
+    if ! curl -sS --max-time 5 "$url"; then
+        echo "UNAVAILABLE"
+    fi
+    echo ""
+}
+
+check_head() {
+    local name="$1"
+    local url="$2"
+    echo "$name:"
+    if ! curl -I -sS --max-time 5 "$url"; then
+        echo "UNAVAILABLE"
+    fi
+    echo ""
+}
+
+check_get "Node Agent" "http://127.0.0.1:8080/health"
+check_head "MCP Server" "http://127.0.0.1:9000/sse?api_key=test-key-123"
+check_get "LangChain Backend" "http://127.0.0.1:10000/health"
+check_head "WebUI V2" "http://127.0.0.1:3002"

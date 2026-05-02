@@ -65,7 +65,11 @@ class ToolManager:
             return {
                 "success": success,
                 "tool": tool_name,
-                "message": f"Successfully installed {tool_name}" if success else f"Failed to install {tool_name}",
+                "message": (
+                    f"Successfully installed {tool_name}"
+                    if success
+                    else (tool.last_error or f"Failed to install {tool_name}")
+                ),
                 "info": tool.get_info()
             }
         except Exception as e:
@@ -133,7 +137,11 @@ class ToolManager:
             return {
                 "success": success,
                 "tool": tool_name,
-                "message": f"Successfully uninstalled {tool_name}" if success else f"Failed to uninstall {tool_name}"
+                "message": (
+                    f"Successfully uninstalled {tool_name}"
+                    if success
+                    else (tool.last_error or f"Failed to uninstall {tool_name}")
+                )
             }
         except Exception as e:
             logger.error(f"Error uninstalling {tool_name}: {e}")

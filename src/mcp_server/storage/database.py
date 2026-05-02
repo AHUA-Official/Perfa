@@ -38,11 +38,15 @@ class Database:
                 ssh_user TEXT DEFAULT '',
                 ssh_password_encrypted TEXT,
                 ssh_key_path TEXT,
+                privilege_mode TEXT DEFAULT 'root',
+                sudo_password_encrypted TEXT,
                 tags TEXT DEFAULT '[]',
                 created_at TIMESTAMP,
                 updated_at TIMESTAMP
             )
         """)
+        self._ensure_column(cursor, "servers", "privilege_mode", "TEXT DEFAULT 'root'")
+        self._ensure_column(cursor, "servers", "sudo_password_encrypted", "TEXT")
         
         # Agent 表
         cursor.execute("""
@@ -78,6 +82,12 @@ class Database:
         conn.close()
     
     # Server 操作
+
+    def _ensure_column(self, cursor: sqlite3.Cursor, table: str, column: str, ddl: str):
+        cursor.execute(f"PRAGMA table_info({table})")
+        columns = {row[1] for row in cursor.fetchall()}
+        if column not in columns:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
     
     def create_server(self, server: Server) -> bool:
         """创建服务器"""
@@ -87,12 +97,14 @@ class Database:
             cursor.execute("""
                 INSERT INTO servers 
                 (server_id, ip, port, alias, agent_id, agent_port, 
-                 ssh_user, ssh_password_encrypted, ssh_key_path, tags, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ssh_user, ssh_password_encrypted, ssh_key_path, privilege_mode,
+                 sudo_password_encrypted, tags, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 server.server_id, server.ip, server.port, server.alias,
                 server.agent_id, server.agent_port, server.ssh_user,
                 server.ssh_password_encrypted, server.ssh_key_path,
+                server.privilege_mode, server.sudo_password_encrypted,
                 json.dumps(server.tags), server.created_at, server.updated_at
             ))
             conn.commit()
@@ -145,11 +157,13 @@ class Database:
                 UPDATE servers SET
                 ip = ?, port = ?, alias = ?, agent_id = ?, agent_port = ?,
                 ssh_user = ?, ssh_password_encrypted = ?, ssh_key_path = ?,
+                privilege_mode = ?, sudo_password_encrypted = ?,
                 tags = ?, updated_at = ?
                 WHERE server_id = ?
             """, (
                 server.ip, server.port, server.alias, server.agent_id, server.agent_port,
                 server.ssh_user, server.ssh_password_encrypted, server.ssh_key_path,
+                server.privilege_mode, server.sudo_password_encrypted,
                 json.dumps(server.tags), server.updated_at, server.server_id
             ))
             conn.commit()
@@ -179,6 +193,8 @@ class Database:
             ssh_user=row["ssh_user"],
             ssh_password_encrypted=row["ssh_password_encrypted"],
             ssh_key_path=row["ssh_key_path"],
+            privilege_mode=row["privilege_mode"] or "root",
+            sudo_password_encrypted=row["sudo_password_encrypted"],
             tags=json.loads(row["tags"]),
             created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
             updated_at=datetime.fromisoformat(row["updated_at"]) if row["updated_at"] else None,

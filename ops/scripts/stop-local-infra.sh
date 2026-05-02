@@ -30,6 +30,14 @@ if pgrep -f "$NODE_AGENT_CMD" > /dev/null; then
 else
     echo "      Node Agent 未运行"
 fi
+
+# 清理遗留的 8000 metrics 监听进程，避免新 Agent 因端口占用启动失败
+if command -v fuser >/dev/null 2>&1; then
+    if fuser 8000/tcp >/dev/null 2>&1; then
+        fuser -k 8000/tcp >/dev/null 2>&1 || true
+        sleep 1
+    fi
+fi
 echo ""
 
 echo "[2/3] 停止 Grafana..."

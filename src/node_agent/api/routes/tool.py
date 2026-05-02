@@ -86,6 +86,13 @@ def install_tool(tool_name: str):
     busy_response = _reject_if_benchmark_running(agent)
     if busy_response:
         return busy_response
+
+    data = request.get_json(silent=True) or {}
+    privilege_mode = data.get("privilege_mode")
+    sudo_password = data.get("sudo_password")
+    if privilege_mode is not None or sudo_password is not None:
+        from privilege import update_privilege_config
+        update_privilege_config(mode=privilege_mode, sudo_password=sudo_password)
     
     result = agent.tool_manager.install_tool(tool_name)
     
@@ -119,6 +126,13 @@ def uninstall_tool(tool_name: str):
     busy_response = _reject_if_benchmark_running(agent)
     if busy_response:
         return busy_response
+
+    data = request.get_json(silent=True) or {}
+    privilege_mode = data.get("privilege_mode")
+    sudo_password = data.get("sudo_password")
+    if privilege_mode is not None or sudo_password is not None:
+        from privilege import update_privilege_config
+        update_privilege_config(mode=privilege_mode, sudo_password=sudo_password)
     
     result = agent.tool_manager.uninstall_tool(tool_name)
     

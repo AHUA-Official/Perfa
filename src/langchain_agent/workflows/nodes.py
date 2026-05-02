@@ -398,6 +398,8 @@ async def install_tools(state: WorkflowState, *, tools: dict = None) -> dict:
         return updates
     
     installed = []
+    failed_tools = []
+    errors = list(state.get("errors", []))
     for tool_name in missing:
         try:
             args = {"server_id": server_id, "tool_name": tool_name}
@@ -411,15 +413,31 @@ async def install_tools(state: WorkflowState, *, tools: dict = None) -> dict:
                 logger.info(f"[Workflow] 工具 {tool_name} 安装成功")
             else:
                 logger.warning(f"[Workflow] 工具 {tool_name} 安装失败: {result}")
+                failed_tools.append(tool_name)
+                errors.append({
+                    "node": "install_tools",
+                    "error": f"工具 {tool_name} 安装失败",
+                    "detail": str(result),
+                })
         except Exception as e:
             logger.error(f"[Workflow] 安装工具 {tool_name} 异常: {e}")
+            failed_tools.append(tool_name)
+            errors.append({
+                "node": "install_tools",
+                "error": f"工具 {tool_name} 安装异常",
+                "detail": str(e),
+            })
     
     available = set(state.get("available_tools", []))
     available.update(installed)
     updates["available_tools"] = list(available)
     updates["missing_tools"] = [t for t in missing if t not in installed]
-    
-    updates.update(_update_node_status(state, "install_tools", "completed"))
+    updates["tool_install_failed"] = bool(failed_tools)
+    if failed_tools:
+        updates["errors"] = errors
+        updates.update(_update_node_status(state, "install_tools", "failed"))
+    else:
+        updates.update(_update_node_status(state, "install_tools", "completed"))
     return updates
 
 
@@ -445,6 +463,17 @@ async def run_benchmark(state: WorkflowState, *, test_name: str, test_params: di
     run_tool = tools.get("run_benchmark")
     status_tool = tools.get("get_benchmark_status")
     result_tool = tools.get("get_benchmark_result")
+    missing_tools = set(state.get("missing_tools", []))
+
+    if state.get("tool_install_failed") or test_name in missing_tools:
+        detail = "依赖工具安装失败" if state.get("tool_install_failed") else f"{test_name} 仍未安装"
+        updates["errors"] = list(state.get("errors", [])) + [{
+            "node": f"run_{test_name}",
+            "error": f"跳过 {test_name} 测试",
+            "detail": detail,
+        }]
+        updates.update(_update_node_status(state, f"run_{test_name}", "failed"))
+        return updates
     
     if not run_tool:
         logger.error("[Workflow] run_benchmark 工具不可用")
@@ -522,7 +551,15 @@ async def run_benchmark(state: WorkflowState, *, test_name: str, test_params: di
         updates["task_ids"] = task_ids
         
         # 轮询等待结果
-        max_wait = 600
+        max_wait_by_test = {
+            "unixbench": 3600,
+            "fio": 1800,
+            "stream": 900,
+            "superpi": 900,
+            "mlc": 900,
+            "hping3": 300,
+        }
+        max_wait = max_wait_by_test.get(test_name, 600)
         poll_interval = 5
         elapsed = 0
         last_status = ""
@@ -573,6 +610,23 @@ async def run_benchmark(state: WorkflowState, *, test_name: str, test_params: di
                         return updates
                 except Exception as e:
                     logger.warning(f"[Workflow] 查询状态异常: {e}")
+
+        if elapsed >= max_wait and last_status not in ("completed", "done", "success"):
+            logger.error(f"[Workflow] {test_name} 测试超时，最后状态: {last_status}")
+            updates["errors"] = list(state.get("errors", [])) + [{
+                "node": f"run_{test_name}",
+                "error": f"{test_name} 测试超时",
+                "detail": f"等待 {elapsed}s 后仍未完成，最后状态: {last_status or 'unknown'}"
+            }]
+            updates.update(_update_node_status(state, f"run_{test_name}", "failed"))
+            if _current_span and _current_span.is_recording():
+                _current_span.add_event("benchmark.timeout", {
+                    "test_name": test_name,
+                    "task_id": task_id,
+                    "last_status": last_status or "unknown",
+                    "waited_seconds": elapsed,
+                })
+            return updates
         
         # OTel: 记录轮询完成
         if _current_span and _current_span.is_recording():

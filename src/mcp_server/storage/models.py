@@ -15,6 +15,8 @@ class Server(BaseModel):
     ssh_user: str = ""
     ssh_password_encrypted: Optional[str] = None  # 加密后的 SSH 密码
     ssh_key_path: Optional[str] = None  # SSH 私钥路径
+    privilege_mode: str = "root"  # root / sudo_nopasswd / sudo_password / none
+    sudo_password_encrypted: Optional[str] = None
     tags: list[str] = []
     created_at: datetime
     updated_at: datetime
