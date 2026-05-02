@@ -15,7 +15,6 @@ Perfa 是一个面向服务器性能测试的多组件系统：
 Perfa/
 ├── codeknowledge/        # 统一知识库
 ├── ops/                  # 统一的运行、部署、compose 与运维资源
-├── doc/                  # 历史方案文档、升级记录
 ├── src/
 │   ├── node_agent/       # 被测节点守护进程
 │   ├── mcp_server/       # MCP Server
@@ -36,6 +35,7 @@ Perfa/
 
 - 看 [03-operations/runtime-and-ports.md](./03-operations/runtime-and-ports.md)
 - 再看 [03-operations/deployment-and-startup.md](./03-operations/deployment-and-startup.md)
+- 如果要区分本地 / 远端 / 混合形态，再看 [03-operations/environments-and-topology.md](./03-operations/environments-and-topology.md)
 
 ### 如果你要改接口或联调
 
@@ -75,5 +75,5 @@ Perfa/
 
 - `webui-v2/` 是当前主前端。
 - `webui/` 是旧方案，除非明确需要兼容，否则不应作为主文档入口。
-- `doc/PROGRESS.md` 对理解最近演进很有价值，但它是阶段性记录，不应代替模块文档。
-- `src/node_agent/design.md` 和 `src/mcp_server/mcp_design.md` 有参考价值，但部分内容属于设计视角，不完全等于当前代码状态。
+- `ops/` 是当前唯一应继续维护的运行入口目录。
+- 历史设计文档的有效内容已经吸收进 `codeknowledge/`，判断当前实现时不应再回头依赖已删除旧稿。

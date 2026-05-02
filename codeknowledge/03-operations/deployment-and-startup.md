@@ -5,11 +5,13 @@
 当前仓库内已有较明确启动脚本或入口的组件：
 
 - Node Agent
+- MCP Server
 - VictoriaMetrics
 - Grafana
 - LangChain Agent API
 - Web UI V2
-- OTel Collector / Jaeger
+
+当前仓库也提供了 OTel Collector / Jaeger 的 compose 和配置，但它们不属于默认本地启动链路。
 
 ## 现有脚本
 
@@ -41,41 +43,37 @@
 
 ### 方案 A：完整本地研发链路
 
-1. 启动监控栈和 Node Agent
-2. 启动 MCP Server
-3. 启动 LangChain Agent API
-4. 启动 Web UI V2
+直接使用统一入口：
+
+```bash
+bash /home/ubuntu/Perfa/ops/scripts/start-local.sh
+```
+
+它会按顺序拉起：
+
+1. 监控栈和 Node Agent
+2. MCP Server
+3. LangChain Agent API
+4. Web UI V2
+
+并等待关键端口就绪。
 
 ### 参考命令
 
 ```bash
-# 1. 监控栈 + Node Agent
-cd /home/ubuntu/Perfa/deploy
-bash /home/ubuntu/Perfa/ops/scripts/start-local-infra.sh
+# 启动
+bash /home/ubuntu/Perfa/ops/scripts/start-local.sh
 
-# 2. MCP Server
-bash /home/ubuntu/Perfa/ops/scripts/start-mcp-server.sh
+# 查看状态
+bash /home/ubuntu/Perfa/ops/scripts/status-local.sh
 
-# 3. LangChain Agent API
-bash /home/ubuntu/Perfa/ops/scripts/start-langchain-backend.sh
-
-# 4. Web UI V2
-bash /home/ubuntu/Perfa/ops/scripts/start-webui-v2.sh
+# 停止
+bash /home/ubuntu/Perfa/ops/scripts/stop-local.sh
 ```
 
 ## 远程 / 混合部署现实
 
-根据 `doc/PROGRESS.md`，项目也存在一种混合形态：
-
-- MCP Server 可能运行在远端
-- Node Agent 可能运行在被测远端服务器
-- 本机只跑 LangChain Agent 和前端
-
-因此后续如果继续整理，建议再补一个 `environments.md`，专门描述：
-
-- 全本地开发模式
-- 本地前端 + 本地 Agent + 远程 MCP 模式
-- 多被测节点模式
+当前拓扑已经单独整理在 [environments-and-topology.md](./environments-and-topology.md)。
 
 ## OTel 部署
 
@@ -90,4 +88,4 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 ## 当前注意点
 
 - `ops/scripts/start-local-infra.sh` 会调用 `sudo docker`，适合本地运维启动，不适合作为纯开发脚本假设。
-- LangChain Agent 的启动路径要从 `src/` 层级进入，否则包导入可能不对。
+- LangChain Agent 当前最稳定的后台启动方式，已经固化在 `ops/scripts/start-local.sh` 中。

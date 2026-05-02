@@ -95,16 +95,12 @@ src/mcp_server/
 ├── agent_client/
 ├── storage/
 ├── tools/
-├── examples/
-└── mcp_design.md
+└── examples/
 ```
 
 ## 配置与示例
 
 - `examples/` 中有 Cursor 和 VSCode 的 MCP 配置样例
-- `mcp_design.md` 适合拿来理解外部接入方式和早期协议说明
-
 ## 文档可信度判断
 
-- `src/mcp_server/mcp_design.md` 对 MCP 使用方式、客户端配置、架构意图仍然有较高价值。
-- 但 Tool 数量、部署细节、内部调用路径应优先以 `server.py` 和 `tools/` 为准。
+- Tool 数量、部署细节、内部调用路径应优先以 `server.py`、`tools/`、`agent_client/` 和 `ops/` 下的当前脚本为准。

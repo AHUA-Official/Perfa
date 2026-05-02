@@ -114,5 +114,5 @@ Node Agent 本身不是用户直接交互的主要入口，它主要被两类调
 
 ## 文档可信度判断
 
-- `src/node_agent/design.md` 对模块边界、接口分类、工具清单仍然有帮助。
-- 但它描述的是设计视角，不应替代 `main.py`、`api/`、`benchmark/` 的当前实现。
+- 这个模块应直接以 `main.py`、`api/`、`benchmark/`、`tool/`、`monitor/` 的当前实现为准。
+- 运行入口应以 `ops/scripts/start-local-infra.sh` 或 `ops/scripts/start-local.sh` 为准。

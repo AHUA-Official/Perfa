@@ -91,12 +91,10 @@ src/langchain_agent/
 ├── tools/
 ├── workflows/
 ├── observability/
-├── prompts/
-├── start.sh
-└── start_backend.sh
+└── prompts/
 ```
 
 ## 文档可信度判断
 
-- `doc/PROGRESS.md` 对这个模块的近期演进最有帮助，特别是 workflow 和 OTel 改造。
-- `src/langchain_agent/PHASE2_DESIGN.md` 可作为阶段设计参考，但当前代码入口仍以 `backend/`、`core/`、`workflows/` 为准。
+- 这个模块当前应直接以 `backend/`、`core/`、`workflows/`、`observability/` 的实现为准。
+- 启动入口已经统一迁移到 `ops/scripts/start-langchain-backend.sh` 和 `ops/scripts/start-local.sh`。

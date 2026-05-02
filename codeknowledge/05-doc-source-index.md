@@ -35,7 +35,7 @@
 
 ## 这次整理后的关系
 
-本次新增的 `codeknowledge/` 不替代原始文档文件，它承担的是：
+本次新增的 `codeknowledge/` 不只是索引，它已经承担：
 
 - 统一入口
 - 消除文档散落
@@ -56,14 +56,12 @@
 - `src/node_agent/design.md`
 - `src/mcp_server/mcp_design.md`
 
-当前仍保留的历史文档只有两份：
-
-- 无
+当前已经不存在需要继续依赖的旧 Markdown 入口文档。
 
 ## 后续建议
 
 如果你准备继续收敛文档，下一步最值得做的是：
 
-1. 把仓库根目录 README 重写成总入口，并链接 `codeknowledge/`
-2. 给 `node_agent`、`mcp_server`、`langchain_agent` 各补一个“接口清单”章节
-3. 给 `ops/` 增加环境拓扑文档，明确本地与远程部署模式
+1. 继续维护 `codeknowledge/`，把它当成唯一知识入口
+2. 新增或修改部署脚本时，同步更新 `03-operations/`
+3. 如果代码与文档冲突，优先修文档，不回退到已删除旧文档

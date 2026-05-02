@@ -1,13 +1,13 @@
 # Perfa Code Knowledge
 
-这个目录是 Perfa 仓库的本地知识库入口，目标是把分散在 `doc/`、`src/`、`webui*`、`test/` 中的说明整理成一套统一、可持续维护的文档结构。
+这个目录是 Perfa 仓库的本地知识库入口，目标是把代码、运行脚本、测试说明和仍有价值的历史背景整理成一套统一、可持续维护的文档结构。
 
 ## 建议阅读顺序
 
 1. [00-map.md](./00-map.md) - 仓库地图与阅读入口
 2. [01-architecture-overview.md](./01-architecture-overview.md) - 系统架构总览
 3. `02-modules/` - 各核心模块分册
-4. `03-operations/` - 运行、端口、部署
+4. `03-operations/` - 运行、端口、部署、拓扑
 5. [04-testing-and-debugging.md](./04-testing-and-debugging.md) - 测试与排障
 6. [05-doc-source-index.md](./05-doc-source-index.md) - 原始文档映射与状态判断
 7. `06-deep-dives/` - 更细粒度的接口、调用链、关键文件索引
@@ -28,17 +28,18 @@ codeknowledge/
 │   └── webui-v2.md
 ├── 03-operations/
 │   ├── runtime-and-ports.md
-│   └── deployment-and-startup.md
+│   ├── deployment-and-startup.md
+│   └── environments-and-topology.md
 ├── 04-testing-and-debugging.md
 ├── 05-doc-source-index.md
-├── 07-history-and-operations-context.md
-├── 08-roadmap-and-spec.md
-└── 06-deep-dives/
+├── 06-deep-dives/
     ├── README.md
     ├── node-agent-api-and-flow.md
     ├── mcp-tools-and-flow.md
     ├── langchain-api-and-workflow.md
     └── webui-v2-pages-and-dataflow.md
+├── 07-history-and-operations-context.md
+└── 08-roadmap-and-spec.md
 ```
 
 ## 维护原则

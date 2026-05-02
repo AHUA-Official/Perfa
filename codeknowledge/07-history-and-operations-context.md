@@ -10,16 +10,18 @@
 
 ## 当前联调环境
 
-根据最近一轮进度记录，项目存在一个“本地 + 远端混合”运行形态：
+当前代码库最可靠、最近一次已实跑验证的形态是“本地完整链路”：
 
 - 本地运行：
+  - `Node Agent`，端口 `8080`
+  - `Node Agent Metrics`，端口 `8000`
+  - `MCP Server`，端口 `9000`
   - `LangChain Agent API`，端口 `10000`
   - `webui-v2`，端口 `3002`
-- 远端运行：
-  - `MCP Server`，`118.25.19.83:9000`
-  - `Node Agent`，`49.234.47.133:8080`
+  - `Grafana`，端口 `3000`
+  - `VictoriaMetrics`，端口 `8428`
 
-这说明仓库的运行方式不只是一种“全本地开发模式”。
+仓库代码也支持混合模式，但当前统一、已验证的启动入口以本地模式为准。
 
 ## 当前重要环境变量
 
@@ -44,24 +46,27 @@ OTEL_CONSOLE_EXPORT=true
 ### LangChain Agent API
 
 ```bash
-cd /home/ubuntu/Perfa/src
-python3 -c "import uvicorn; from langchain_agent.backend.main import app, API_PORT; uvicorn.run(app, host='0.0.0.0', port=API_PORT)"
+bash /home/ubuntu/Perfa/ops/scripts/start-langchain-backend.sh
 ```
 
-注意：这一层需要从 `src/` 启动，避免包导入路径错误。
+注意：统一入口 `ops/scripts/start-local.sh` 内部已经处理了稳定的后台启动方式。
 
 ### Web UI V2
 
 ```bash
-cd /home/ubuntu/Perfa/webui-v2
-npm run dev
+bash /home/ubuntu/Perfa/ops/scripts/start-webui-v2.sh
 ```
 
 ### MCP Server 本地启动
 
 ```bash
-cd /home/ubuntu/Perfa/src/mcp_server
-python3 main.py
+bash /home/ubuntu/Perfa/ops/scripts/start-mcp-server.sh
+```
+
+### 本地完整链路
+
+```bash
+bash /home/ubuntu/Perfa/ops/scripts/start-local.sh
 ```
 
 ## 历史演进摘要
@@ -110,7 +115,7 @@ AI IDE -> MCP Server -> LangChain Agent -> SSH 执行器 -> 目标服务器
 
 ## 最近实现状态
 
-根据最后一份进度记录，当前可视为：
+从当前代码与最近一轮实跑验证看，当前可视为：
 
 - Phase 1 已完成
 - Phase 2 主体完成
@@ -119,7 +124,7 @@ AI IDE -> MCP Server -> LangChain Agent -> SSH 执行器 -> 目标服务器
 仍待继续推进的事项包括：
 
 - 前端可观测性面板
-- OTel Collector + Jaeger 实际启动联调
+- OTel Collector + Jaeger 默认不在 `start-local.sh` 中启动，仍需单独联调
 - 全链路集成测试
 - 报告图表与监控增强
 
