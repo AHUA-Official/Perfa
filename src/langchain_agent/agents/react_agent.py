@@ -11,6 +11,7 @@ Perfa - LangChain Agent Module
 import asyncio
 import json
 import re
+import time as _time
 from typing import Dict, List, Any, Optional, Set
 from datetime import datetime
 
@@ -81,6 +82,57 @@ class ReActAgent(BaseAgent):
         
         session_id = kwargs.get("session_id", "default")
         context = kwargs.get("context", {})
+        
+        # OTel: 创建顶层 ReAct 循环 span
+        _tracer = None
+        _span = None
+        _token = None
+        try:
+            from langchain_agent.observability.tracer import get_tracer
+            _tracer = get_tracer()
+        except Exception:
+            pass
+        
+        if _tracer:
+            from opentelemetry import context as otel_ctx, trace
+            _span = _tracer.start_span(
+                "react_agent.run",
+                attributes={"query": query[:200], "session_id": session_id},
+            )
+            ctx = trace.set_span_in_context(_span)
+            _token = otel_ctx.attach(ctx)
+        
+        try:
+            result = await self._run_impl(query, session_id, context, kwargs)
+            if _span:
+                _span.set_attribute("is_success", result.is_success)
+                _span.set_attribute("tool_calls_count", len(result.tool_calls))
+                _span.set_attribute("execution_time", result.execution_time)
+                
+                # 记录 ReAct 循环完整摘要
+                tool_chain = " → ".join([tc.tool_name for tc in result.tool_calls]) if result.tool_calls else "no_tool_calls"
+                _span.add_event("react.summary", {
+                    "tool_chain": tool_chain,
+                    "iterations": len(result.tool_calls),
+                    "final_result_preview": str(result.result)[:500] if result.result else "",
+                    "is_success": result.is_success,
+                })
+            return result
+        except Exception as e:
+            if _span:
+                _span.record_exception(e)
+                from opentelemetry.sdk.trace import Status, StatusCode
+                _span.set_status(Status(StatusCode.ERROR, description=str(e)[:200]))
+            raise
+        finally:
+            if _span:
+                _span.end()
+            if _token:
+                from opentelemetry import context as otel_ctx
+                otel_ctx.detach(_token)
+    
+    async def _run_impl(self, query: str, session_id: str, context: dict, kwargs: dict) -> AgentResponse:
+        """ReAct 循环实现（从 run 中抽取）"""
         
         # 检查是否是直接工具调用格式（加速）
         direct_tool_match = re.match(r'^`?(\w+)`?\s*(.*)$', query.strip())
@@ -265,6 +317,24 @@ class ReActAgent(BaseAgent):
         Returns:
             tuple: (思考结果字典, 完整推理内容字符串)
         """
+        # OTel: 思考阶段 span
+        _span = None
+        _token = None
+        try:
+            from langchain_agent.observability.tracer import get_tracer
+            _tracer = get_tracer()
+            if _tracer:
+                from opentelemetry import context as otel_ctx, trace
+                _span = _tracer.start_span(
+                    "react_agent.think",
+                    attributes={"iteration": len(tool_calls)},
+                )
+                ctx = trace.set_span_in_context(_span)
+                _token = otel_ctx.attach(ctx)
+        except Exception:
+            pass
+        
+        _think_start = _time.monotonic()
         # 构建思考提示
         tools_description = self._format_tools_description()
         
@@ -402,6 +472,39 @@ run_benchmark → list_benchmark_history ❌
                 thought = json.loads(json_str)
                 logger.debug(f"成功解析思考结果: {thought}")
                 
+                # OTel: 记录思考结果（丰富化：完整推理+决策理由+关键上下文）
+                if _span:
+                    _think_duration = _time.monotonic() - _think_start
+                    _span.set_attribute("duration_seconds", _think_duration)
+                    _span.set_attribute("is_final", thought.get("is_final", False))
+                    if thought.get("tool_name"):
+                        _span.set_attribute("tool_name", thought["tool_name"])
+
+                    # 记录 AI 完整推理过程（关键：给后续 AI 分析用）
+                    reasoning_text = content[:2000] if content else ""
+                    _span.add_event("ai.reasoning", {
+                        "reasoning_content": reasoning_text,
+                        "iteration": len(tool_calls),
+                    })
+
+                    # 记录 AI 决策
+                    if thought.get("is_final"):
+                        _span.add_event("ai.decision", {
+                            "decision_type": "final_answer",
+                            "answer_preview": str(thought.get("content", ""))[:500],
+                        })
+                    elif thought.get("tool_name"):
+                        _span.add_event("ai.decision", {
+                            "decision_type": "tool_call",
+                            "tool_name": thought["tool_name"],
+                            "tool_args": json.dumps(thought.get("tool_args", {}), ensure_ascii=False)[:500],
+                        })
+                    else:
+                        _span.add_event("ai.decision", {
+                            "decision_type": "unknown",
+                            "raw_thought": json.dumps(thought, ensure_ascii=False)[:500],
+                        })
+                
                 # 确保返回的字典有必要的字段
                 if "is_final" not in thought:
                     thought["is_final"] = True
@@ -419,10 +522,18 @@ run_benchmark → list_benchmark_history ❌
                 
         except Exception as e:
             logger.error(f"思考过程失败: {str(e)}")
+            if _span:
+                _span.record_exception(e)
             return {
                 "is_final": True,
                 "content": f"思考过程失败，无法继续: {str(e)}"
             }, ""
+        finally:
+            if _span:
+                _span.end()
+            if _token:
+                from opentelemetry import context as otel_ctx
+                otel_ctx.detach(_token)
     
     async def _act(self, tool_name: str, tool_args: Any) -> Dict[str, Any]:
         """
@@ -435,7 +546,34 @@ run_benchmark → list_benchmark_history ❌
         Returns:
             Dict: 工具执行结果
         """
+        # OTel: 工具调用 span
+        _span = None
+        _token = None
+        try:
+            from langchain_agent.observability.tracer import get_tracer
+            _tracer = get_tracer()
+            if _tracer:
+                from opentelemetry import context as otel_ctx, trace
+                _span = _tracer.start_span(
+                    "react_agent.act",
+                    attributes={"tool_name": tool_name},
+                )
+                ctx = trace.set_span_in_context(_span)
+                _token = otel_ctx.attach(ctx)
+        except Exception:
+            pass
+        
+        _act_start = _time.monotonic()
+        
         if tool_name not in self.tools:
+            if _span:
+                _span.set_attribute("success", False)
+                _span.set_attribute("error", "tool_not_found")
+                _span.add_event("tool.not_found", {"tool_name": tool_name})
+                _span.end()
+            if _token:
+                from opentelemetry import context as otel_ctx
+                otel_ctx.detach(_token)
             return {
                 "success": False,
                 "error": f"工具不存在: {tool_name}"
@@ -449,6 +587,13 @@ run_benchmark → list_benchmark_history ❌
         elif not isinstance(tool_args, dict):
             tool_args = {}
         
+        # OTel: 记录工具调用参数（决策依据）
+        if _span:
+            _span.add_event("tool.invocation", {
+                "tool_name": tool_name,
+                "tool_args": json.dumps(tool_args, ensure_ascii=False, default=str)[:1000],
+            })
+        
         try:
             # 调用工具（异步方式）
             if hasattr(tool, 'ainvoke'):
@@ -460,6 +605,40 @@ run_benchmark → list_benchmark_history ❌
             else:
                 # 同步调用
                 result = tool.run(tool_args)
+            
+            _act_duration = _time.monotonic() - _act_start
+            if _span:
+                _span.set_attribute("duration_seconds", _act_duration)
+                _span.set_attribute("success", True)
+                
+                # 记录工具返回结果摘要（给 AI 分析用）
+                result_preview = ""
+                if isinstance(result, dict):
+                    # 提取关键信息
+                    if "task_id" in result:
+                        result_preview = f"task_id={result['task_id']}, status={result.get('status', 'unknown')}"
+                    elif "servers" in result:
+                        result_preview = f"found {len(result['servers'])} servers"
+                    elif "results" in result:
+                        result_preview = f"found {len(result['results'])} records"
+                    else:
+                        result_preview = json.dumps(result, ensure_ascii=False, default=str)[:500]
+                else:
+                    result_preview = str(result)[:500]
+                
+                _span.add_event("tool.result", {
+                    "tool_name": tool_name,
+                    "success": True,
+                    "result_preview": result_preview,
+                    "duration_seconds": _act_duration,
+                })
+            
+            # 记录 OTel 指标
+            try:
+                from langchain_agent.observability.instrument_agent import record_tool_call_metrics
+                record_tool_call_metrics(tool_name, _act_duration, True)
+            except Exception:
+                pass
             
             # 处理返回结果
             # MCP 工具返回的可能是：
@@ -491,10 +670,38 @@ run_benchmark → list_benchmark_history ❌
             logger.error(f"工具调用失败 {tool_name}: {str(e)}")
             import traceback
             traceback.print_exc()
+            
+            _act_duration = _time.monotonic() - _act_start
+            if _span:
+                _span.set_attribute("duration_seconds", _act_duration)
+                _span.set_attribute("success", False)
+                _span.record_exception(e)
+                
+                # 记录失败详情
+                _span.add_event("tool.error", {
+                    "tool_name": tool_name,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)[:500],
+                    "duration_seconds": _act_duration,
+                })
+            
+            # 记录 OTel 指标
+            try:
+                from langchain_agent.observability.instrument_agent import record_tool_call_metrics
+                record_tool_call_metrics(tool_name, _act_duration, False)
+            except Exception:
+                pass
+            
             return {
                 "success": False,
                 "error": str(e)
             }
+        finally:
+            if _span:
+                _span.end()
+            if _token:
+                from opentelemetry import context as otel_ctx
+                otel_ctx.detach(_token)
     
     def _format_tools_description(self) -> str:
         """格式化工具描述（包含参数说明）"""

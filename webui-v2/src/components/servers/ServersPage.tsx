@@ -1,0 +1,303 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import {
+  Table, Tag, Badge, Drawer, Typography, Button, Modal, Form, Input,
+  InputNumber, Select, message, Space, Popconfirm, Card
+} from 'antd';
+import {
+  PlusOutlined, DeleteOutlined, ReloadOutlined,
+  DesktopOutlined, KeyOutlined, UserOutlined, CloudServerOutlined
+} from '@ant-design/icons';
+import { listServers, ServerInfo } from '@/lib/api';
+
+const { Text, Paragraph } = Typography;
+
+const statusMap: Record<string, { color: string; text: string }> = {
+  online: { color: 'green', text: '在线' },
+  offline: { color: 'red', text: '离线' },
+  unknown: { color: 'gray', text: '未知' },
+};
+
+interface RegisterFormValues {
+  ip: string;
+  port?: number;
+  ssh_user: string;
+  ssh_password?: string;
+  ssh_key_path?: string;
+  alias?: string;
+  tags?: string[];
+}
+
+export default function ServersPage() {
+  const [servers, setServers] = useState<ServerInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<ServerInfo | null>(null);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [form] = Form.useForm<RegisterFormValues>();
+
+  useEffect(() => {
+    loadServers();
+  }, []);
+
+  const loadServers = async () => {
+    setLoading(true);
+    try {
+      const data = await listServers();
+      setServers(data);
+    } catch {
+      setServers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (values: RegisterFormValues) => {
+    setRegisterLoading(true);
+    try {
+      const res = await fetch('/api/v1/servers/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        // 非 JSON 响应（如 500 错误页面）
+        message.error(`注册失败: 服务器错误 (HTTP ${res.status})`);
+        return;
+      }
+      if (data.success) {
+        message.success(`服务器 ${values.ip} 注册成功！`);
+        setRegisterModalOpen(false);
+        form.resetFields();
+        loadServers();
+      } else {
+        const errMsg = data.error || data.detail || '注册失败';
+        message.error(errMsg);
+      }
+    } catch (err: any) {
+      message.error(`注册失败: ${err.message}`);
+    } finally {
+      setRegisterLoading(false);
+    }
+  };
+
+  const handleRemove = async (serverId: string) => {
+    try {
+      const res = await fetch(`/api/v1/servers/${serverId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        message.success('服务器已移除');
+        loadServers();
+        setSelected(null);
+      } else {
+        message.error(data.error || '移除失败');
+      }
+    } catch (err: any) {
+      message.error(`移除失败: ${err.message}`);
+    }
+  };
+
+  const columns = [
+    {
+      title: 'IP',
+      dataIndex: 'ip',
+      key: 'ip',
+      render: (ip: string) => <Text code className="!text-primary">{ip}</Text>,
+    },
+    {
+      title: '别名',
+      dataIndex: 'alias',
+      key: 'alias',
+      render: (alias: string) => alias || '-',
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string) => {
+        const s = statusMap[status] || { color: 'default', text: status };
+        return <Badge color={s.color} text={<span className="text-text-secondary">{s.text}</span>} />;
+      },
+    },
+    {
+      title: '标签',
+      dataIndex: 'tags',
+      key: 'tags',
+      render: (tags: string[]) =>
+        tags?.map((t) => <Tag key={t} color="cyan">{t}</Tag>) || '-',
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_: any, record: ServerInfo) => (
+        <Popconfirm
+          title="确认移除该服务器？"
+          onConfirm={() => handleRemove(record.server_id)}
+          okText="确认"
+          cancelText="取消"
+        >
+          <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  return (
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-medium text-text-primary flex items-center gap-2">
+          <CloudServerOutlined /> 服务器管理
+        </h2>
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={loadServers} size="small">
+            刷新
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setRegisterModalOpen(true)}
+          >
+            注册服务器
+          </Button>
+        </Space>
+      </div>
+
+      {servers.length === 0 && !loading ? (
+        <Card className="!bg-bg-card !border-white/5 text-center py-12">
+          <DesktopOutlined className="text-4xl text-text-muted mb-4" />
+          <p className="text-text-secondary mb-4">暂无注册服务器</p>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setRegisterModalOpen(true)}
+          >
+            注册第一台服务器
+          </Button>
+        </Card>
+      ) : (
+        <Table
+          dataSource={servers}
+          columns={columns}
+          rowKey="server_id"
+          loading={loading}
+          onRow={(record) => ({
+            onClick: () => setSelected(record),
+            className: 'cursor-pointer',
+          })}
+          pagination={false}
+          className="!bg-bg-card [&_.ant-table]:!bg-transparent [&_.ant-table-thead>tr>th]:!bg-bg-hover [&_.ant-table-thead>tr>th]:!text-text-secondary"
+        />
+      )}
+
+      {/* 服务器详情 Drawer */}
+      <Drawer
+        title={selected?.alias || selected?.ip}
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        width={480}
+        className="!bg-bg-card"
+      >
+        {selected && (
+          <div className="space-y-4">
+            <div>
+              <Text className="!text-text-muted">IP 地址</Text>
+              <div><Text code className="!text-primary">{selected.ip}</Text></div>
+            </div>
+            <div>
+              <Text className="!text-text-muted">状态</Text>
+              <div>
+                <Badge
+                  color={statusMap[selected.status]?.color || 'default'}
+                  text={statusMap[selected.status]?.text || selected.status}
+                />
+              </div>
+            </div>
+            {selected.hardware && (
+              <div>
+                <Text className="!text-text-muted">硬件信息</Text>
+                <pre className="mt-1 text-xs bg-bg-main p-3 rounded-lg overflow-auto max-h-80">
+                  {JSON.stringify(selected.hardware, null, 2)}
+                </pre>
+              </div>
+            )}
+            <div className="pt-4 border-t border-white/10">
+              <Popconfirm
+                title="确认移除该服务器？"
+                onConfirm={() => handleRemove(selected.server_id)}
+              >
+                <Button danger icon={<DeleteOutlined />}>移除服务器</Button>
+              </Popconfirm>
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* 注册服务器 Modal */}
+      <Modal
+        title={
+          <span className="flex items-center gap-2">
+            <CloudServerOutlined /> 注册新服务器
+          </span>
+        }
+        open={registerModalOpen}
+        onCancel={() => { setRegisterModalOpen(false); form.resetFields(); }}
+        onOk={() => form.submit()}
+        confirmLoading={registerLoading}
+        okText="注册"
+        cancelText="取消"
+        width={520}
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleRegister}
+          initialValues={{ port: 22 }}
+          className="mt-4"
+        >
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item
+              name="ip"
+              label="IP 地址"
+              rules={[{ required: true, message: '请输入服务器 IP' }]}
+            >
+              <Input placeholder="192.168.1.100" prefix={<DesktopOutlined />} />
+            </Form.Item>
+            <Form.Item name="port" label="SSH 端口">
+              <InputNumber className="w-full" min={1} max={65535} />
+            </Form.Item>
+          </div>
+
+          <Form.Item
+            name="ssh_user"
+            label="SSH 用户名"
+            rules={[{ required: true, message: '请输入 SSH 用户名' }]}
+          >
+            <Input placeholder="root" prefix={<UserOutlined />} />
+          </Form.Item>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item name="ssh_password" label="SSH 密码" extra="密码和密钥二选一">
+              <Input.Password placeholder="可选" prefix={<KeyOutlined />} />
+            </Form.Item>
+            <Form.Item name="ssh_key_path" label="SSH 密钥路径" extra="如 ~/.ssh/id_rsa">
+              <Input placeholder="可选" />
+            </Form.Item>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item name="alias" label="别名">
+              <Input placeholder="如：web-server-01" />
+            </Form.Item>
+            <Form.Item name="tags" label="标签">
+              <Select mode="tags" placeholder="输入后回车" />
+            </Form.Item>
+          </div>
+        </Form>
+      </Modal>
+    </div>
+  );
+}

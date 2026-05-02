@@ -155,6 +155,18 @@ class MCPServer:
             ]
         )
         
+        # OTel: 注入 Starlette 自动 Instrumentation
+        try:
+            from langchain_agent.observability.instrument_server import (
+                setup_server_tracing, instrument_starlette_app
+            )
+            setup_server_tracing(service_name="perfa-mcp-server")
+            instrument_starlette_app(app)
+        except ImportError:
+            logger.warning("⚠️ OTel instrumentation 不可用（依赖缺失），跳过")
+        except Exception as e:
+            logger.warning(f"⚠️ OTel instrumentation 失败: {e}")
+        
         # 启动服务器
         import uvicorn
         logger.info(f"MCP Server starting on {self.config.host}:{self.config.port}")

@@ -135,7 +135,9 @@ class MCPToolAdapter:
         async def async_tool_function(**kwargs):
             """异步工具函数 - 每次调用建立临时连接"""
             try:
-                logger.info(f"调用MCP工具: {tool_info.name}，参数: {kwargs}")
+                # 过滤 None 值，MCP Server 不接受 null 参数
+                filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+                logger.info(f"调用MCP工具: {tool_info.name}，参数: {filtered_kwargs}")
                 
                 # 建立临时SSE连接
                 async with sse_client(self.sse_url) as streams:
@@ -143,7 +145,7 @@ class MCPToolAdapter:
                         await session.initialize()
                         
                         # 调用MCP工具
-                        result = await session.call_tool(tool_info.name, kwargs)
+                        result = await session.call_tool(tool_info.name, filtered_kwargs)
                         
                         logger.info(f"MCP工具调用成功: {tool_info.name}")
                         logger.debug(f"MCP返回结果类型: {type(result)}")

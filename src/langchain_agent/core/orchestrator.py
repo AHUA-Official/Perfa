@@ -2,13 +2,14 @@
 Perfa - LangChain Agent Module
 
 @file: core/orchestrator.py
-@desc: Agent编排器
+@desc: Agent编排器 — 支持工作流路由和 ReAct 两种模式
 @author: Perfa Team
 @date: 2026-03-18
 """
 
 # 标准库导入
 import asyncio
+import time as _time
 from typing import List, Dict, Any, Optional
 
 # 第三方库导入
@@ -24,12 +25,33 @@ from langchain_agent.core.memory import ConversationMemory
 from langchain_agent.core.error_handler import ErrorHandler
 from langchain_agent.core.config import LLMConfig, MCPConfig, AgentConfig
 
+# OTel 可观测性
+_otel_initialized = False
+
+
+def _init_otel():
+    """初始化 OTel 追踪和指标（仅一次）"""
+    global _otel_initialized
+    if _otel_initialized:
+        return
+    _otel_initialized = True
+    try:
+        from langchain_agent.observability import setup_tracing, setup_metrics
+        setup_tracing(service_name="perfa-agent")
+        setup_metrics(service_name="perfa-agent")
+        logger.info("✅ OTel 可观测性初始化完成")
+    except Exception as e:
+        logger.warning(f"⚠️ OTel 初始化失败（不影响运行）: {e}")
+
 
 class AgentOrchestrator:
     """
     Agent编排器
     
-    负责协调不同Agent和工具，处理用户查询
+    负责协调不同Agent和工具，处理用户查询。
+    支持两种执行模式：
+    - auto: 先场景路由，结构化场景走 LangGraph 工作流，其余走 ReAct
+    - react: 强制走原 ReAct 循环
     """
     
     def __init__(
@@ -62,14 +84,39 @@ class AgentOrchestrator:
         )
         self.llm = self._create_llm()
         self.tools = self.mcp_adapter.list_tools()
+        self.tools_dict = {tool.name: tool for tool in self.tools}
         self.agent = ReActAgent(
             llm=self.llm,
             tools=self.tools,
             max_iterations=self.agent_config.max_iterations
         )
         
+        # 初始化工作流引擎
+        self.workflow_engine = None
+        self._init_workflow_engine()
+        
+        # 初始化 OTel 可观测性
+        _init_otel()
+        
         logger.info(f"Agent编排器初始化完成，使用智谱AI GLM-5")
         logger.info(f"可用工具数: {len(self.tools)}")
+    
+    def _init_workflow_engine(self):
+        """初始化 LangGraph 工作流引擎"""
+        try:
+            from langchain_agent.workflows.graph_builder import WorkflowEngine
+            self.workflow_engine = WorkflowEngine(
+                tools=self.tools_dict,
+                llm=self.llm,
+                confidence_threshold=0.7
+            )
+            logger.info(f"✅ 工作流引擎初始化完成，可用场景: {self.workflow_engine.get_available_scenarios()}")
+        except ImportError as e:
+            logger.warning(f"⚠️ LangGraph 未安装，工作流模式不可用: {e}")
+            self.workflow_engine = None
+        except Exception as e:
+            logger.warning(f"⚠️ 工作流引擎初始化失败: {e}")
+            self.workflow_engine = None
     
     def _create_llm(self) -> BaseLLM:
         """
@@ -100,7 +147,10 @@ class AgentOrchestrator:
         Args:
             query: 用户查询
             session_id: 会话ID（可选）
-            mode: 执行模式（目前只支持auto/react，未来可扩展其他模式）
+            mode: 执行模式
+                - auto: 先场景路由，结构化场景走 LangGraph 工作流，其余走 ReAct
+                - react: 强制走原 ReAct 循环
+                - workflow: 强制走工作流模式（需指定 scenario 参数）
         
         Returns:
             Dict: 处理结果
@@ -109,69 +159,169 @@ class AgentOrchestrator:
             import uuid
             session_id = f"session_{uuid.uuid4().hex[:16]}"
         
-        # mode 参数预留用于未来扩展（如 planning, chain-of-thought 等）
-        if mode not in ["auto", "react"]:
+        if mode not in ["auto", "react", "workflow"]:
             logger.warning(f"未知的执行模式 '{mode}'，使用默认模式 'auto'")
+            mode = "auto"
         
-        logger.info(f"开始处理查询，会话ID: {session_id}")
+        logger.info(f"开始处理查询，会话ID: {session_id}，模式: {mode}")
         logger.info(f"用户查询: {query}")
         
+        # 记录用户消息到记忆
+        self.memory.add_message(session_id, "user", query)
+        
+        # OTel: 顶层查询处理 span + 活跃会话指标
+        _span = None
+        _token = None
+        _trace_id = None
         try:
-            # 记录用户消息到记忆
-            self.memory.add_message(session_id, "user", query)
-            
-            # 获取会话历史作为上下文传给Agent
-            session_history = self.memory.get_history(session_id, last_n=10)
-            
-            # 调用Agent执行
-            logger.info("调用ReAct Agent执行查询")
-            response = await self.agent.run(
-                query, 
-                session_id=session_id,
-                context={"session_history": session_history}
-            )
+            from langchain_agent.observability.tracer import get_tracer
+            _tracer = get_tracer()
+            if _tracer:
+                from opentelemetry import context as otel_ctx, trace
+                _span = _tracer.start_span(
+                    "orchestrator.process_query",
+                    attributes={"query": query[:200], "session_id": session_id, "mode": mode},
+                )
+                ctx = trace.set_span_in_context(_span)
+                _token = otel_ctx.attach(ctx)
+                # 获取 trace_id 传给前端
+                span_ctx = _span.get_span_context()
+                _trace_id = format(span_ctx.trace_id, '032x')
+        except Exception:
+            pass
+        
+        # 活跃会话 +1
+        try:
+            from langchain_agent.observability.metrics import get_metric
+            session_metric = get_metric("session_active")
+            if session_metric:
+                session_metric.add(1, {"session_id": session_id})
+        except Exception:
+            pass
+        
+        try:
+            if mode == "react":
+                # 强制走 ReAct
+                if _span:
+                    _span.add_event("routing.decision", {
+                        "mode": "react",
+                        "reason": "user_forced",
+                    })
+                result = await self._run_react(query, session_id)
+            elif mode == "workflow" or mode == "auto":
+                # auto 模式: 先尝试场景路由
+                if mode == "auto" and self.workflow_engine:
+                    scenario = await self.workflow_engine.route(query)
+                    logger.info(f"场景路由结果: {scenario.name} ({scenario.display_name})")
+                    
+                    if scenario.name == "free_chat":
+                        # 走原 ReAct 循环
+                        if _span:
+                            _span.add_event("routing.decision", {
+                                "mode": "react",
+                                "routed_scenario": scenario.name,
+                                "reason": "free_chat_no_workflow_match",
+                            })
+                        result = await self._run_react(query, session_id)
+                    else:
+                        # 走 LangGraph 工作流
+                        if _span:
+                            _span.add_event("routing.decision", {
+                                "mode": "workflow",
+                                "routed_scenario": scenario.name,
+                                "scenario_display": scenario.display_name,
+                                "reason": "scenario_matched",
+                            })
+                        result = await self._run_workflow(scenario.name, query, session_id)
+                elif mode == "workflow" and self.workflow_engine:
+                    # 强制走工作流，默认使用 full_assessment
+                    scenario = await self.workflow_engine.route(query)
+                    if scenario.name == "free_chat":
+                        scenario_name = "full_assessment"
+                    else:
+                        scenario_name = scenario.name
+                    if _span:
+                        _span.add_event("routing.decision", {
+                            "mode": "workflow",
+                            "routed_scenario": scenario_name,
+                            "original_scenario": scenario.name,
+                            "reason": "user_forced_workflow",
+                        })
+                    result = await self._run_workflow(scenario_name, query, session_id)
+                else:
+                    # 降级到 ReAct
+                    if _span:
+                        _span.add_event("routing.decision", {
+                            "mode": "react",
+                            "reason": "workflow_engine_unavailable",
+                        })
+                    result = await self._run_react(query, session_id)
             
             # 记录助手消息到记忆
-            self.memory.add_message(session_id, "assistant", response.result)
+            self.memory.add_message(session_id, "assistant", result.get("result", ""))
             
             # 记录工具调用到记忆
-            for tool_call in response.tool_calls:
+            for tool_call in result.get("tool_calls", []):
                 self.memory.add_message(
                     session_id,
                     "tool",
-                    f"工具: {tool_call.tool_name}，结果: {str(tool_call.result)[:100]}...",
+                    f"工具: {tool_call.get('tool_name', '')}，结果: {str(tool_call.get('result', ''))[:100]}...",
                     metadata={
-                        "tool_name": tool_call.tool_name,
-                        "arguments": tool_call.arguments,
-                        "execution_time": tool_call.execution_time
+                        "tool_name": tool_call.get("tool_name", ""),
+                        "arguments": tool_call.get("arguments", {}),
+                        "execution_time": tool_call.get("execution_time", 0),
                     }
                 )
             
-            logger.info(f"查询处理完成，耗时: {response.execution_time:.2f}秒，工具调用: {len(response.tool_calls)}次")
+            logger.info(f"查询处理完成，耗时: {result.get('execution_time', 0):.2f}秒")
             
-            return {
-                "success": True,
-                "session_id": session_id,
-                "query": query,
-                "result": response.result,
-                "tool_calls": [
-                    {
-                        "tool_name": tc.tool_name,
-                        "arguments": tc.arguments,
-                        "result": tc.result,
-                        "execution_time": tc.execution_time
-                    }
-                    for tc in response.tool_calls
-                ],
-                "execution_time": response.execution_time,
-                "is_success": response.is_success,
-                "thinking_process": response.thinking_process if hasattr(response, 'thinking_process') else None,
-                "reasoning_time": response.reasoning_time if hasattr(response, 'reasoning_time') else 0
-            }
+            # OTel: 结束 span
+            if _span:
+                _span.set_attribute("is_success", result.get("is_success", False))
+                _span.set_attribute("execution_time", result.get("execution_time", 0))
+                _span.set_attribute("mode_used", result.get("mode", mode))
+                _span.end()
+            if _token:
+                from opentelemetry import context as otel_ctx
+                otel_ctx.detach(_token)
+            
+            # 活跃会话 -1
+            try:
+                from langchain_agent.observability.metrics import get_metric
+                session_metric = get_metric("session_active")
+                if session_metric:
+                    session_metric.add(-1, {"session_id": session_id})
+            except Exception:
+                pass
+            
+            # 附加 trace_id 到结果
+            if _trace_id:
+                result["trace_id"] = _trace_id
+                result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+            
+            return result
             
         except Exception as e:
             error_msg = f"处理查询失败: {str(e)}"
             logger.error(error_msg)
+            
+            # OTel: 记录异常
+            if _span:
+                _span.record_exception(e)
+                _span.set_attribute("is_success", False)
+                _span.end()
+            if _token:
+                from opentelemetry import context as otel_ctx
+                otel_ctx.detach(_token)
+            
+            # 活跃会话 -1
+            try:
+                from langchain_agent.observability.metrics import get_metric
+                session_metric = get_metric("session_active")
+                if session_metric:
+                    session_metric.add(-1, {"session_id": session_id})
+            except Exception:
+                pass
             
             return {
                 "success": False,
@@ -180,8 +330,66 @@ class AgentOrchestrator:
                 "error": error_msg,
                 "tool_calls": [],
                 "execution_time": 0,
-                "is_success": False
+                "is_success": False,
+                "trace_id": _trace_id,
+                "jaeger_url": f"/api/jaeger/trace/{_trace_id}" if _trace_id else None,
             }
+    
+    async def _run_react(self, query: str, session_id: str) -> Dict[str, Any]:
+        """使用原 ReAct Agent 执行查询"""
+        session_history = self.memory.get_history(session_id, last_n=10)
+        
+        logger.info("使用 ReAct Agent 执行查询")
+        response = await self.agent.run(
+            query, 
+            session_id=session_id,
+            context={"session_history": session_history}
+        )
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "query": query,
+            "result": response.result,
+            "tool_calls": [
+                {
+                    "tool_name": tc.tool_name,
+                    "arguments": tc.arguments,
+                    "result": tc.result,
+                    "execution_time": tc.execution_time
+                }
+                for tc in response.tool_calls
+            ],
+            "execution_time": response.execution_time,
+            "is_success": response.is_success,
+            "mode": "react",
+            "thinking_process": response.thinking_process if hasattr(response, 'thinking_process') else None,
+            "reasoning_time": response.reasoning_time if hasattr(response, 'reasoning_time') else 0
+        }
+    
+    async def _run_workflow(self, scenario_name: str, query: str, session_id: str) -> Dict[str, Any]:
+        """使用 LangGraph 工作流执行查询"""
+        logger.info(f"使用工作流执行查询，场景: {scenario_name}")
+        
+        result = await self.workflow_engine.run(scenario_name, query, session_id)
+        
+        # 补充工作流元信息
+        result["mode"] = "workflow"
+        result["scenario"] = scenario_name
+        result["is_success"] = result.get("success", False)
+        
+        # 兼容字段
+        if "thinking_process" not in result:
+            # 构造工作流进度信息作为 thinking_process
+            node_statuses = result.get("node_statuses", {})
+            completed = result.get("completed_nodes", [])
+            progress_lines = [f"### 工作流执行进度\n"]
+            for node, status in node_statuses.items():
+                icon = {"completed": "✅", "running": "🔄", "failed": "❌", "pending": "⬜"}.get(status, "⬜")
+                progress_lines.append(f"{icon} {node}: {status}")
+            result["thinking_process"] = "\n".join(progress_lines)
+        
+        return result
     
     async def execute_tool(self, tool_name: str, arguments: Dict[str, Any], max_retries: Optional[int] = None) -> Dict[str, Any]:
         """

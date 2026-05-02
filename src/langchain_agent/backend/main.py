@@ -8,8 +8,15 @@ FastAPI Application Entry Point
 """
 
 import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# 加载 .env 文件
+from dotenv import load_dotenv
+_env_path = Path(__file__).parent.parent / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path)
 
 # 使用统一日志模块
 from langchain_agent.core.logger import get_logger

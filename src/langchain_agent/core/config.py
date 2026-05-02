@@ -36,6 +36,7 @@ class LLMConfig(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"  # 忽略 .env 中非本类的变量
     
     def __post_init__(self):
         if self.zhipu_api_key:

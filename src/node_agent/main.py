@@ -185,6 +185,45 @@ def main():
     """主函数"""
     global agent
     
+    # OTel: 初始化追踪（在所有其他导入之前）
+    _otel_initialized = False
+    try:
+        import os
+        otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+        if otlp_endpoint:
+            from opentelemetry import trace
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry.sdk.resources import Resource
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            
+            resource = Resource.create({
+                "service.name": "perfa-node-agent",
+                "service.version": "0.1.0",
+            })
+            provider = TracerProvider(resource=resource)
+            provider.add_span_processor(BatchSpanProcessor(
+                OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+            ))
+            trace.set_tracer_provider(provider)
+            _otel_initialized = True
+            logger.info(f"✅ Node Agent OTel: OTLP 导出 → {otlp_endpoint}")
+    except ImportError:
+        logger.warning("⚠️ opentelemetry 未安装，Node Agent 追踪不可用")
+    except Exception as e:
+        logger.warning(f"⚠️ Node Agent OTel 初始化失败: {e}")
+    
+    # OTel: Flask 自动 Instrumentation
+    if _otel_initialized:
+        try:
+            from opentelemetry.instrumentation.flask import FlaskInstrumentor
+            FlaskInstrumentor().instrument()
+            logger.info("✅ FlaskInstrumentor 已启用")
+        except ImportError:
+            logger.warning("⚠️ opentelemetry-instrumentation-flask 未安装")
+        except Exception as e:
+            logger.warning(f"⚠️ FlaskInstrumentor 启用失败: {e}")
+    
     # 注册信号处理
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)

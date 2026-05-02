@@ -59,3 +59,66 @@ class ModelList(BaseModel):
     """Model list response"""
     object: str = "list"
     data: List[ModelInfo]
+
+
+# ===== Extended API Schemas =====
+
+
+class ServerInfo(BaseModel):
+    """服务器信息"""
+    server_id: str = Field(..., description="服务器唯一标识")
+    ip: str = Field(..., description="服务器 IP")
+    alias: Optional[str] = Field(None, description="服务器别名")
+    status: str = Field("unknown", description="在线状态: online/offline/unknown")
+    tags: List[str] = Field(default_factory=list, description="标签")
+    hardware: Optional[Dict[str, Any]] = Field(None, description="硬件信息")
+
+
+class ServerListResponse(BaseModel):
+    """服务器列表响应"""
+    servers: List[ServerInfo] = Field(default_factory=list)
+
+
+class WorkflowNodeStatus(BaseModel):
+    """工作流节点状态"""
+    name: str = Field(..., description="节点名称")
+    status: str = Field("pending", description="节点状态: pending/running/completed/failed")
+    display_name: Optional[str] = Field(None, description="节点显示名称")
+    error: Optional[str] = Field(None, description="错误信息")
+
+
+class WorkflowStatusResponse(BaseModel):
+    """工作流状态响应"""
+    scenario: str = Field(..., description="场景名称")
+    session_id: str = Field(..., description="会话 ID")
+    nodes: List[WorkflowNodeStatus] = Field(default_factory=list)
+    current_node: Optional[str] = Field(None, description="当前执行节点")
+    completed_nodes: List[str] = Field(default_factory=list, description="已完成节点列表")
+    progress: float = Field(0.0, description="完成进度 0.0~1.0")
+
+
+class ReportInfo(BaseModel):
+    """报告摘要信息"""
+    id: str = Field(..., description="报告 ID")
+    type: str = Field(..., description="测试类型")
+    server_id: str = Field(..., description="服务器 ID")
+    created_at: str = Field(..., description="创建时间")
+    status: str = Field("completed", description="报告状态")
+    summary: Optional[str] = Field(None, description="摘要")
+
+
+class ReportListResponse(BaseModel):
+    """报告列表响应"""
+    reports: List[ReportInfo] = Field(default_factory=list)
+
+
+class ReportDetail(BaseModel):
+    """报告详情"""
+    id: str
+    type: str
+    server_id: str
+    created_at: str
+    status: str = "completed"
+    summary: Optional[str] = None
+    content: Optional[Dict[str, Any]] = None
+    charts: Optional[List[Dict[str, Any]]] = None
