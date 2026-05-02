@@ -189,6 +189,41 @@ class DeployAgentTool(BaseTool):
         result = subprocess.run(rsync_cmd, capture_output=True, text=True, timeout=300)
         return result.returncode == 0, result.stderr
 
+    def _collect_agent_diagnostics(self, server, install_dir: str) -> Dict[str, str]:
+        """在 Agent 未就绪时收集远端诊断信息，避免只返回笼统失败。"""
+        diagnostics: Dict[str, str] = {}
+        client: Optional[paramiko.SSHClient] = None
+        commands = {
+            "processes": "pgrep -af '[p]ython3 main.py' || true",
+            "ports": "ss -ltnp | grep ':8080\\|:8000' || true",
+            "local_health": "curl -sS --max-time 5 http://127.0.0.1:8080/health || true",
+            "node_agent_log": (
+                f"tail -n 100 {install_dir}/logs/node_agent.log 2>/dev/null || "
+                "tail -n 100 /tmp/agent.log 2>/dev/null || true"
+            ),
+        }
+
+        try:
+            client = self._ssh_connect(server)
+            for name, command in commands.items():
+                try:
+                    stdin, stdout, stderr = client.exec_command(command, timeout=20)
+                    output = stdout.read().decode().strip()
+                    error_output = stderr.read().decode().strip()
+                    combined = output
+                    if error_output:
+                        combined = f"{combined}\n[stderr]\n{error_output}".strip()
+                    diagnostics[name] = combined or "(empty)"
+                except Exception as command_error:
+                    diagnostics[name] = f"diagnostic command failed: {command_error}"
+        except Exception as e:
+            diagnostics["collection_error"] = str(e)
+        finally:
+            if client:
+                client.close()
+
+        return diagnostics
+
     def _restart_agent_only(self, client: paramiko.SSHClient, install_dir: str) -> tuple[int, str, str]:
         """仅重装并重启 node_agent，避免每次带上整套监控栈"""
         log_dir = f"{install_dir}/logs"
@@ -285,11 +320,29 @@ class DeployAgentTool(BaseTool):
             # 5. 安装 Python 依赖
             logger.info(f"[部署Agent] 步骤5: 安装Python依赖")
             client = self._ssh_connect(server)
-            client.exec_command(
+            stdin, stdout, stderr = client.exec_command(
                 f"cd {install_dir}/src/node_agent && "
                 f"pip3 install -q -r requirements.txt 2>/dev/null || "
-                f"pip3 install -q flask prometheus-client psutil pydantic requests"
-            )[1].channel.recv_exit_status()
+                f"pip3 install -q flask prometheus-client psutil pydantic requests",
+                timeout=300
+            )
+            pip_output = stdout.read().decode()
+            pip_error_output = stderr.read().decode()
+            pip_exit_code = stdout.channel.recv_exit_status()
+            logger.info(f"[部署Agent] Python依赖安装完成, exit_code={pip_exit_code}")
+            if pip_output.strip():
+                logger.info(f"[部署Agent] Python依赖安装输出: {pip_output[:1000]}")
+            if pip_error_output.strip():
+                logger.warning(f"[部署Agent] Python依赖安装错误输出: {pip_error_output[:1000]}")
+            if pip_exit_code != 0:
+                client.close()
+                return {
+                    "success": False,
+                    "error": "Python 依赖安装失败",
+                    "pip_exit_code": pip_exit_code,
+                    "pip_output": pip_output,
+                    "pip_stderr": pip_error_output,
+                }
             
             if agent_only:
                 logger.info(f"[部署Agent] 步骤6: 仅重装并重启 node_agent")
@@ -307,7 +360,10 @@ class DeployAgentTool(BaseTool):
                 error_output = stderr.read().decode()
                 exit_code = stdout.channel.recv_exit_status()
             logger.info(f"[部署Agent] 启动脚本执行完成, 退出码: {exit_code}")
-            logger.debug(f"[部署Agent] 启动脚本输出: {output[:500]}")
+            if output.strip():
+                logger.info(f"[部署Agent] 启动脚本输出: {output[:1000]}")
+            if error_output.strip():
+                logger.warning(f"[部署Agent] 启动脚本错误输出: {error_output[:1000]}")
             client.close()
             
             if exit_code != 0:
@@ -322,11 +378,18 @@ class DeployAgentTool(BaseTool):
             # 7. 验证 Agent 状态
             logger.info(f"[部署Agent] 步骤7: 验证Agent状态")
             if not self._wait_for_agent_health(server):
+                diagnostics = self._collect_agent_diagnostics(server, install_dir)
+                logger.error(f"[部署Agent] Agent健康检查失败，远端诊断: {diagnostics}")
                 logger.error(f"[部署Agent] Agent健康检查失败")
                 return {
                     "success": False,
                     "error": f"Agent 启动失败，请检查日志（等待就绪超时：{int(os.getenv('DEPLOY_AGENT_HEALTH_ATTEMPTS', '36')) * int(os.getenv('DEPLOY_AGENT_HEALTH_INTERVAL_SEC', '5'))}秒）",
-                    "agent_id": agent_id
+                    "agent_id": agent_id,
+                    "diagnostics": diagnostics,
+                    "restart_output": output,
+                    "restart_stderr": error_output,
+                    "pip_output": pip_output,
+                    "pip_stderr": pip_error_output,
                 }
             logger.info(f"[部署Agent] Agent健康检查通过")
 

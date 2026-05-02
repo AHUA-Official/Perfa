@@ -921,28 +921,48 @@ async def get_report(report_id: str):
     try:
         orchestrator = await get_orchestrator()
         tools_dict = orchestrator.tools_dict
+        list_servers_tool = tools_dict.get("list_servers")
         get_result_tool = tools_dict.get("get_benchmark_result")
 
-        if get_result_tool:
-            result = await get_result_tool.ainvoke({"task_id": report_id})
-            if isinstance(result, str):
+        if list_servers_tool and get_result_tool:
+            servers_result = await list_servers_tool.ainvoke({})
+            if isinstance(servers_result, str):
                 import json as _json
                 try:
-                    result = _json.loads(result)
+                    servers_result = _json.loads(servers_result)
                 except _json.JSONDecodeError:
-                    pass
+                    servers_result = []
 
-            if isinstance(result, dict):
-                return ReportDetail(
-                    id=report_id,
-                    type=result.get("type", result.get("benchmark_type", "unknown")),
-                    server_id=result.get("server_id", result.get("server", "")),
-                    created_at=result.get("created_at", result.get("start_time", "")),
-                    status=result.get("status", "completed"),
-                    summary=result.get("summary"),
-                    content=result.get("result", result.get("metrics")),
-                    charts=result.get("charts"),
-                )
+            servers = servers_result if isinstance(servers_result, list) else servers_result.get("servers", [])
+
+            for server in servers:
+                if not isinstance(server, dict):
+                    continue
+                server_id = server.get("server_id")
+                if not server_id:
+                    continue
+
+                result = await get_result_tool.ainvoke({"server_id": server_id, "task_id": report_id})
+                if isinstance(result, str):
+                    import json as _json
+                    try:
+                        result = _json.loads(result)
+                    except _json.JSONDecodeError:
+                        result = {}
+
+                if isinstance(result, dict) and result.get("success", True) and (
+                    result.get("task_id") == report_id or result.get("id") == report_id
+                ):
+                    return ReportDetail(
+                        id=report_id,
+                        type=result.get("type", result.get("benchmark_type", "unknown")),
+                        server_id=result.get("server_id", server_id),
+                        created_at=result.get("created_at", result.get("start_time", "")),
+                        status=result.get("status", "completed"),
+                        summary=result.get("summary"),
+                        content=result.get("result", result.get("metrics")),
+                        charts=result.get("charts"),
+                    )
 
         raise HTTPException(status_code=404, detail="Report not found")
     except HTTPException:

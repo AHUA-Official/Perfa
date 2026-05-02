@@ -126,6 +126,18 @@ def _select_iperf3_target(servers: list[dict], current_server_id: str = "") -> t
     return "127.0.0.1", current_server_id
 
 
+def _select_target_server(servers: list[dict], preferred_server_id: str = "") -> dict | None:
+    """优先使用前端/上游已选中的 server_id，否则回落到列表第一台。"""
+    if not servers:
+        return None
+    if preferred_server_id:
+        for server in servers:
+            server_id, _, _, _ = _extract_server_identity(server)
+            if server_id == preferred_server_id:
+                return server
+    return servers[0]
+
+
 def make_node(fn: Callable, **kwargs) -> Callable:
     """
     节点工厂函数
@@ -243,9 +255,11 @@ async def check_environment(state: WorkflowState, *, tools: dict = None) -> dict
             if parsed_servers_result:
                 servers = parsed_servers_result.get("servers", [])
             
-            if servers:
-                first_server = servers[0]
-                server_id, server_ip, agent_id, agent_status = _extract_server_identity(first_server)
+            preferred_server_id = state.get("server_id", "")
+            selected_server = _select_target_server(servers, preferred_server_id)
+
+            if selected_server:
+                server_id, server_ip, agent_id, agent_status = _extract_server_identity(selected_server)
                 
                 if server_id:
                     updates["server_id"] = server_id
@@ -266,7 +280,7 @@ async def check_environment(state: WorkflowState, *, tools: dict = None) -> dict
                         "server_id": server_id,
                         "agent_status": agent_status,
                         "total_servers_found": len(servers),
-                        "reason": "first_available" if len(servers) == 1 else "default_first",
+                        "reason": "preferred_server_id" if preferred_server_id and server_id == preferred_server_id else ("first_available" if len(servers) == 1 else "default_first"),
                     })
                 
                 logger.info(f"[Workflow] 找到服务器: {server_ip} (ID: {server_id})")
@@ -303,7 +317,11 @@ async def check_environment(state: WorkflowState, *, tools: dict = None) -> dict
             if parsed_tools_result.get("success") is False:
                 raise RuntimeError(parsed_tools_result.get("error", "list_tools 调用失败"))
             tool_list = parsed_tools_result.get("tools", [])
-            available_tools = [t.get("name", "") for t in tool_list if isinstance(t, dict)]
+            available_tools = [
+                t.get("name", "")
+                for t in tool_list
+                if isinstance(t, dict) and t.get("status") == "installed"
+            ]
             
             updates["available_tools"] = available_tools
             logger.info(f"[Workflow] 可用工具: {available_tools}")
@@ -553,7 +571,7 @@ async def run_benchmark(state: WorkflowState, *, test_name: str, test_params: di
             "test_name": test_name,
         }
         if test_params:
-            args["params"] = json.dumps(test_params)
+            args["params"] = test_params
         
         # OTel: 记录压测启动参数
         if _current_span and _current_span.is_recording():
