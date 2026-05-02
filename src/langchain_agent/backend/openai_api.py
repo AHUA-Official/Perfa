@@ -526,53 +526,58 @@ async def list_servers():
 
             # 获取 check_agent_status 工具用于实时状态查询
             check_status_tool = tools_dict.get("check_agent_status")
+            import asyncio
 
-            servers = []
-            for s in result.get("servers", result if isinstance(result, list) else []):
-                if isinstance(s, dict):
-                    # 尝试获取实时状态
-                    server_id = s.get("server_id", s.get("id", ""))
-                    status = "unknown"
-                    status_result = {}
-                    if check_status_tool and server_id:
-                        try:
-                            status_result = await check_status_tool.ainvoke({"server_id": server_id})
-                            if isinstance(status_result, str):
-                                import json as _json2
-                                try:
-                                    status_result = _json2.loads(status_result)
-                                except _json2.JSONDecodeError:
-                                    status_result = {}
-                            if isinstance(status_result, dict):
-                                agent_st = status_result.get("agent_status", "")
-                                if agent_st in ("online", "running"):
-                                    status = "online"
-                                elif agent_st in ("offline", "stopped", "error"):
-                                    status = "offline"
-                        except Exception:
-                            pass  # 查询失败则回退到静态状态
+            raw_servers = [s for s in (result.get("servers", result if isinstance(result, list) else [])) if isinstance(s, dict)]
 
-                    # 回退: 从 list_servers 返回的 agent_status 字段推断
-                    if status == "unknown":
-                        agent_status = s.get("agent_status", "")
-                        if agent_status in ("online", "running", "deployed"):
-                            status = "online"
-                        elif agent_status in ("offline", "stopped", "error"):
-                            status = "offline"
+            async def _resolve_server(s: dict) -> ServerInfo:
+                server_id = s.get("server_id", s.get("id", ""))
+                status = "unknown"
+                status_result = {}
 
-                    servers.append(ServerInfo(
-                        server_id=server_id,
-                        ip=s.get("ip", s.get("host", "")),
-                        alias=s.get("alias", s.get("name")),
-                        status=status,
-                        tags=s.get("tags", []),
-                        hardware=s.get("hardware", s.get("system_info")),
-                        agent_id=s.get("agent_id"),
-                        agent_port=s.get("agent_port"),
-                        agent_status=status_result.get("agent_status") if isinstance(status_result, dict) else s.get("agent_status"),
-                        agent_version=status_result.get("version") if isinstance(status_result, dict) else None,
-                        current_task=status_result.get("current_task") if isinstance(status_result, dict) else None,
-                    ))
+                if check_status_tool and server_id:
+                    try:
+                        status_result = await asyncio.wait_for(
+                            check_status_tool.ainvoke({"server_id": server_id}),
+                            timeout=8,
+                        )
+                        if isinstance(status_result, str):
+                            import json as _json2
+                            try:
+                                status_result = _json2.loads(status_result)
+                            except _json2.JSONDecodeError:
+                                status_result = {}
+                        if isinstance(status_result, dict):
+                            agent_st = status_result.get("agent_status", "")
+                            if agent_st in ("online", "running"):
+                                status = "online"
+                            elif agent_st in ("offline", "stopped", "error"):
+                                status = "offline"
+                    except Exception:
+                        pass  # 查询失败则回退到静态状态
+
+                if status == "unknown":
+                    agent_status = s.get("agent_status", "")
+                    if agent_status in ("online", "running", "deployed"):
+                        status = "online"
+                    elif agent_status in ("offline", "stopped", "error"):
+                        status = "offline"
+
+                return ServerInfo(
+                    server_id=server_id,
+                    ip=s.get("ip", s.get("host", "")),
+                    alias=s.get("alias", s.get("name")),
+                    status=status,
+                    tags=s.get("tags", []),
+                    hardware=s.get("hardware", s.get("system_info")),
+                    agent_id=s.get("agent_id"),
+                    agent_port=s.get("agent_port"),
+                    agent_status=status_result.get("agent_status") if isinstance(status_result, dict) else s.get("agent_status"),
+                    agent_version=status_result.get("version") if isinstance(status_result, dict) else None,
+                    current_task=status_result.get("current_task") if isinstance(status_result, dict) else None,
+                )
+
+            servers = await asyncio.gather(*[_resolve_server(s) for s in raw_servers])
 
             return ServerListResponse(servers=servers)
 

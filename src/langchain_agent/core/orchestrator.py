@@ -203,12 +203,14 @@ class AgentOrchestrator:
         except Exception:
             pass
         
+        session_metric_attrs = {"session_id": session_id, "conversation_id": conversation_id}
+
         # 活跃会话 +1
         try:
             from langchain_agent.observability.metrics import get_metric
             session_metric = get_metric("session_active")
             if session_metric:
-                session_metric.add(1, {"session_id": session_id, "conversation_id": conversation_id})
+                session_metric.add(1, session_metric_attrs)
         except Exception:
             pass
         
@@ -303,7 +305,7 @@ class AgentOrchestrator:
                 from langchain_agent.observability.metrics import get_metric
                 session_metric = get_metric("session_active")
                 if session_metric:
-                    session_metric.add(-1, {"session_id": session_id})
+                    session_metric.add(-1, session_metric_attrs)
             except Exception:
                 pass
             
@@ -333,7 +335,7 @@ class AgentOrchestrator:
                 from langchain_agent.observability.metrics import get_metric
                 session_metric = get_metric("session_active")
                 if session_metric:
-                    session_metric.add(-1, {"session_id": session_id})
+                    session_metric.add(-1, session_metric_attrs)
             except Exception:
                 pass
             
@@ -422,6 +424,7 @@ class AgentOrchestrator:
         _span = None
         _token = None
         _trace_id = None
+        session_metric_attrs = {"session_id": session_id, "conversation_id": conversation_id}
         try:
             from langchain_agent.observability.tracer import get_tracer
             _tracer = get_tracer()
@@ -440,6 +443,15 @@ class AgentOrchestrator:
                 _token = otel_ctx.attach(ctx)
                 span_ctx = _span.get_span_context()
                 _trace_id = format(span_ctx.trace_id, '032x')
+        except Exception:
+            pass
+
+        # 活跃会话 +1
+        try:
+            from langchain_agent.observability.metrics import get_metric
+            session_metric = get_metric("session_active")
+            if session_metric:
+                session_metric.add(1, session_metric_attrs)
         except Exception:
             pass
         
@@ -482,6 +494,20 @@ class AgentOrchestrator:
                     result["trace_id"] = _trace_id
                     result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
                 result["conversation_id"] = conversation_id
+
+                # 记录到记忆，保证流式工作流和同步路径一致
+                self.memory.add_message(session_id, "assistant", result.get("result", ""))
+                for tool_call in result.get("tool_calls", []):
+                    self.memory.add_message(
+                        session_id,
+                        "tool",
+                        f"工具: {tool_call.get('tool_name', '')}，结果: {str(tool_call.get('result', ''))[:100]}...",
+                        metadata={
+                            "tool_name": tool_call.get("tool_name", ""),
+                            "arguments": tool_call.get("arguments", {}),
+                            "execution_time": tool_call.get("execution_time", 0),
+                        }
+                    )
                 
                 # 流式推送答案正文
                 final_content = result.get("result", "")
@@ -645,6 +671,13 @@ class AgentOrchestrator:
             if _token:
                 from opentelemetry import context as otel_ctx
                 otel_ctx.detach(_token)
+            try:
+                from langchain_agent.observability.metrics import get_metric
+                session_metric = get_metric("session_active")
+                if session_metric:
+                    session_metric.add(-1, session_metric_attrs)
+            except Exception:
+                pass
     
     async def _stream_answer(self, text: str, chunk_size: int = 40):
         """将最终答案按段落/片段切片流式输出"""
