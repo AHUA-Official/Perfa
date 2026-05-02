@@ -22,6 +22,8 @@ DEFAULT_INSTALL_DIR = "/opt/perfa"
 
 REMOTE_INFRA_START_SCRIPT = "ops/scripts/start-point.sh"
 REMOTE_INFRA_STOP_SCRIPT = "ops/scripts/stop-point.sh"
+REMOTE_NODE_AGENT_START_SCRIPT = "ops/scripts/start-node-agent.sh"
+REMOTE_NODE_AGENT_STOP_SCRIPT = "ops/scripts/stop-node-agent.sh"
 
 
 class DeployAgentTool(BaseTool):
@@ -225,20 +227,18 @@ class DeployAgentTool(BaseTool):
         return diagnostics
 
     def _restart_agent_only(self, client: paramiko.SSHClient, install_dir: str) -> tuple[int, str, str]:
-        """仅重装并重启 node_agent，避免每次带上整套监控栈"""
+        """仅重装并重启 node_agent，统一走 ops/scripts 下的启动脚本。"""
         log_dir = f"{install_dir}/logs"
         log_file = f"{log_dir}/node_agent.log"
         command = (
             f"mkdir -p {log_dir} && "
-            f"cd {install_dir}/src/node_agent && "
-            f"pip3 install -q -r requirements.txt 2>/dev/null || "
-            f"pip3 install -q flask prometheus-client psutil pydantic requests && "
-            f"pkill -f '[p]ython3 main.py' || true && "
+            f"cd {install_dir} && "
+            f"chmod +x {REMOTE_NODE_AGENT_STOP_SCRIPT} {REMOTE_NODE_AGENT_START_SCRIPT} && "
+            f"PERFA_NODE_AGENT_LOG='{log_file}' bash {REMOTE_NODE_AGENT_STOP_SCRIPT} && "
             f"sleep 2 && "
-            f"export PERFA_LOG_TO_STDOUT=false PERFA_NODE_AGENT_LOG='{log_file}' && "
-            f"setsid python3 main.py >>'{log_file}' 2>&1 < /dev/null &"
+            f"PERFA_NODE_AGENT_LOG='{log_file}' bash {REMOTE_NODE_AGENT_START_SCRIPT}"
         )
-        stdin, stdout, stderr = client.exec_command(command, timeout=180)
+        stdin, stdout, stderr = client.exec_command(command, timeout=240)
         output = stdout.read().decode()
         error_output = stderr.read().decode()
         exit_code = stdout.channel.recv_exit_status()
