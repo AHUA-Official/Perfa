@@ -367,6 +367,237 @@ class AgentOrchestrator:
             "reasoning_time": response.reasoning_time if hasattr(response, 'reasoning_time') else 0
         }
     
+    async def process_query_stream(self, query: str, session_id: Optional[str] = None, mode: str = "auto"):
+        """
+        流式处理用户查询 — 在 ReAct 循环的每一步 yield 事件
+        
+        事件类型:
+        - thinking_start: 开始思考 {iteration}
+        - thinking_result: 思考完成 {iteration, reasoning, decision}
+        - tool_result: 工具调用结果 {tool_name, result, execution_time}
+        - workflow_progress: 工作流进度 {current_node, status, scenario}
+        - done: 完成 {result}
+        """
+        import asyncio
+        
+        if not session_id:
+            import uuid
+            session_id = f"session_{uuid.uuid4().hex[:16]}"
+        
+        logger.info(f"[Stream] 开始流式处理查询，会话ID: {session_id}，模式: {mode}")
+        
+        # 记录用户消息到记忆
+        self.memory.add_message(session_id, "user", query)
+        
+        # OTel
+        _span = None
+        _token = None
+        _trace_id = None
+        try:
+            from langchain_agent.observability.tracer import get_tracer
+            _tracer = get_tracer()
+            if _tracer:
+                from opentelemetry import context as otel_ctx, trace
+                _span = _tracer.start_span(
+                    "orchestrator.process_query_stream",
+                    attributes={"query": query[:200], "session_id": session_id, "mode": mode},
+                )
+                ctx = trace.set_span_in_context(_span)
+                _token = otel_ctx.attach(ctx)
+                span_ctx = _span.get_span_context()
+                _trace_id = format(span_ctx.trace_id, '032x')
+        except Exception:
+            pass
+        
+        try:
+            # 场景路由
+            scenario = None
+            if mode == "auto" and self.workflow_engine:
+                scenario = await self.workflow_engine.route(query)
+                logger.info(f"[Stream] 场景路由结果: {scenario.name}")
+                
+                if _span:
+                    _span.add_event("routing.decision", {
+                        "mode": "workflow" if scenario.name != "free_chat" else "react",
+                        "routed_scenario": scenario.name,
+                    })
+            
+            if scenario and scenario.name != "free_chat" and self.workflow_engine:
+                # ---- 工作流模式 ----
+                yield {
+                    "type": "workflow_progress",
+                    "current_node": "starting",
+                    "status": "running",
+                    "scenario": scenario.display_name or scenario.name,
+                }
+                
+                result = await self._run_workflow(scenario.name, query, session_id)
+                
+                # 工作流节点进度
+                node_statuses = result.get("node_statuses", {})
+                for node, status in node_statuses.items():
+                    yield {
+                        "type": "workflow_progress",
+                        "current_node": node,
+                        "status": status,
+                        "scenario": scenario.display_name or scenario.name,
+                    }
+                
+                # 推送最终结果
+                if _trace_id:
+                    result["trace_id"] = _trace_id
+                    result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+                
+                yield {"type": "done", "result": result}
+            else:
+                # ---- ReAct 模式（逐步推送） ----
+                session_history = self.memory.get_history(session_id, last_n=10)
+                
+                # 直接执行 ReAct 循环，在每个步骤之间 yield 事件
+                from langchain_agent.agents.base_agent import AgentResponse, ToolCall
+                
+                self.agent.thoughts.clear()
+                tool_calls: list = []
+                iteration = 0
+                final_result = ""
+                thinking_log: list = []
+                total_reasoning_time = 0.0
+                
+                while iteration < self.agent.max_iterations:
+                    iteration += 1
+                    
+                    # 推送：开始思考
+                    yield {
+                        "type": "thinking_start",
+                        "iteration": iteration,
+                    }
+                    
+                    # 思考
+                    think_start_dt = __import__('datetime').datetime.now()
+                    thought, full_reasoning = await self.agent._think(
+                        query, tool_calls,
+                        {"session_history": session_history}
+                    )
+                    think_time = (__import__('datetime').datetime.now() - think_start_dt).total_seconds()
+                    total_reasoning_time += think_time
+                    
+                    self.agent.thoughts.append(thought)
+                    if full_reasoning:
+                        thinking_log.append(f"### 思考 #{iteration}\n\n{full_reasoning}")
+                    
+                    # 推送：思考结果
+                    yield {
+                        "type": "thinking_result",
+                        "iteration": iteration,
+                        "reasoning": full_reasoning[:500] if full_reasoning else "",
+                        "decision": {
+                            "is_final": thought.get("is_final", False),
+                            "tool_name": thought.get("tool_name"),
+                            "tool_args": thought.get("tool_args"),
+                        },
+                    }
+                    
+                    # 检查是否完成
+                    if thought.get("is_final", False):
+                        final_result = thought.get("content", "任务已完成")
+                        break
+                    
+                    # 行动：调用工具
+                    if "tool_name" in thought and "tool_args" in thought:
+                        tool_name = thought["tool_name"]
+                        tool_args = thought["tool_args"]
+                        
+                        tool_start_dt = __import__('datetime').datetime.now()
+                        tool_result = await self.agent._act(tool_name, tool_args)
+                        execution_time = (__import__('datetime').datetime.now() - tool_start_dt).total_seconds()
+                        
+                        tool_call = ToolCall(
+                            tool_name=tool_name,
+                            arguments=tool_args,
+                            result=tool_result,
+                            execution_time=execution_time
+                        )
+                        tool_calls.append(tool_call)
+                        
+                        # 推送：工具调用结果
+                        yield {
+                            "type": "tool_result",
+                            "tool_name": tool_name,
+                            "result": tool_result,
+                            "execution_time": execution_time,
+                        }
+                    
+                    await asyncio.sleep(0.1)
+                
+                # 构建最终结果
+                if iteration >= self.agent.max_iterations and not final_result:
+                    final_result = f"达到最大迭代次数({self.agent.max_iterations})仍未完成，已返回部分结果"
+                
+                thinking_summary = "\n\n".join(thinking_log) if thinking_log else None
+                total_time = self.agent._calculate_execution_time()
+                
+                result = {
+                    "success": True,
+                    "session_id": session_id,
+                    "query": query,
+                    "result": final_result or "未生成结果",
+                    "tool_calls": [
+                        {
+                            "tool_name": tc.tool_name,
+                            "arguments": tc.arguments,
+                            "result": tc.result,
+                            "execution_time": tc.execution_time
+                        }
+                        for tc in tool_calls
+                    ],
+                    "execution_time": total_time,
+                    "is_success": True,
+                    "mode": "react",
+                    "thinking_process": thinking_summary,
+                    "reasoning_time": total_reasoning_time,
+                }
+                
+                # 记录到记忆
+                self.memory.add_message(session_id, "assistant", result.get("result", ""))
+                for tc in tool_calls:
+                    self.memory.add_message(
+                        session_id, "tool",
+                        f"工具: {tc.tool_name}，结果: {str(tc.result)[:100]}...",
+                        metadata={"tool_name": tc.tool_name, "arguments": tc.arguments, "execution_time": tc.execution_time}
+                    )
+                
+                if _trace_id:
+                    result["trace_id"] = _trace_id
+                    result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+                
+                yield {"type": "done", "result": result}
+        
+        except Exception as e:
+            logger.error(f"[Stream] 流式处理异常: {str(e)}")
+            if _span:
+                _span.record_exception(e)
+            yield {
+                "type": "done",
+                "result": {
+                    "success": False,
+                    "session_id": session_id,
+                    "query": query,
+                    "result": f"处理失败: {str(e)}",
+                    "tool_calls": [],
+                    "execution_time": 0,
+                    "is_success": False,
+                    "mode": mode,
+                    "trace_id": _trace_id,
+                    "jaeger_url": f"/api/jaeger/trace/{_trace_id}" if _trace_id else None,
+                }
+            }
+        finally:
+            if _span:
+                _span.end()
+            if _token:
+                from opentelemetry import context as otel_ctx
+                otel_ctx.detach(_token)
+    
     async def _run_workflow(self, scenario_name: str, query: str, session_id: str) -> Dict[str, Any]:
         """使用 LangGraph 工作流执行查询"""
         logger.info(f"使用工作流执行查询，场景: {scenario_name}")

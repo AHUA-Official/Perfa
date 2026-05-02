@@ -105,7 +105,7 @@ async def stream_chat_response(query: str) -> AsyncGenerator[str, None]:
     """
     Stream chat response using SSE (Server-Sent Events)
     
-    真流式：边生成边推送，来一个字展示一个字
+    真流式：在 ReAct 循环的每一步实时推送进度（思考、工具调用、观察）
     """
     import asyncio
     
@@ -122,6 +122,14 @@ async def stream_chat_response(query: str) -> AsyncGenerator[str, None]:
     except Exception:
         pass
     
+    def push_content(text: str) -> str:
+        """推送一个内容 chunk"""
+        return format_sse({
+            "id": chat_id,
+            "object": "chat.completion.chunk",
+            "choices": [{"delta": {"content": text}, "index": 0}]
+        })
+    
     try:
         orchestrator = await get_orchestrator()
         
@@ -136,93 +144,220 @@ async def stream_chat_response(query: str) -> AsyncGenerator[str, None]:
             header_data["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
         yield format_sse(header_data)
         
-        # 先推一个"正在思考"提示
-        yield format_sse({
-            "id": chat_id,
-            "object": "chat.completion.chunk",
-            "choices": [{"delta": {"content": "⏳ 正在分析您的请求...\n\n"}, "index": 0}]
-        })
+        # ---- 真流式：通过回调在 ReAct 每一步实时推送 ----
+        streamed_content = []  # 收集已推送的内容，最终无需再推
         
-        # Process query (后台执行)
-        result = await orchestrator.process_query(query)
+        async def on_thinking_start(iteration: int):
+            """ReAct 每轮思考开始"""
+            yield push_content(f"\n\n🔄 **第{iteration}轮思考中...**\n\n")
         
-        # 如果之前没拿到 trace_id，尝试从结果中获取
-        if not trace_id_hex and result.get("trace_id"):
-            trace_id_hex = result.get("trace_id")
+        async def on_thinking_result(iteration: int, reasoning: str, decision: dict):
+            """ReAct 思考结果出来"""
+            parts = []
+            # 推理摘要（截断太长的推理内容）
+            if reasoning:
+                preview = reasoning[:500] + ("..." if len(reasoning) > 500 else "")
+                parts.append(f"💭 *推理摘要*: {preview}\n\n")
+            
+            if decision.get("is_final"):
+                parts.append("✅ **已得到最终答案**\n\n")
+            elif decision.get("tool_name"):
+                tool_name = decision["tool_name"]
+                tool_args = decision.get("tool_args", {})
+                args_str = json.dumps(tool_args, ensure_ascii=False) if tool_args else ""
+                parts.append(f"🔧 **调用工具**: `{tool_name}`\n")
+                if args_str:
+                    parts.append(f"   参数: `{args_str[:200]}`\n")
+                parts.append("\n")
+            
+            if parts:
+                yield push_content("".join(parts))
         
-        # 清除"正在思考"提示 → 用 Markdown 分隔覆盖
-        yield format_sse({
-            "id": chat_id,
-            "object": "chat.completion.chunk",
-            "choices": [{"delta": {"content": "\r\r"}, "index": 0}]
-        })
+        async def on_tool_result(tool_name: str, result: dict, exec_time: float):
+            """工具调用结果"""
+            parts = []
+            if result.get("success"):
+                # 精简结果展示
+                data = result.get("data", result)
+                if isinstance(data, dict):
+                    if "task_id" in data:
+                        parts.append(f"   ✅ 返回 task_id: `{data['task_id']}`\n")
+                    elif "servers" in data:
+                        servers = data.get("servers", [])
+                        parts.append(f"   ✅ 找到 {len(servers)} 台服务器\n")
+                    elif "status" in data:
+                        parts.append(f"   ✅ 状态: {data['status']}\n")
+                    else:
+                        preview = json.dumps(data, ensure_ascii=False)[:300]
+                        parts.append(f"   ✅ 结果: `{preview}`\n")
+                else:
+                    preview = str(data)[:200]
+                    parts.append(f"   ✅ 结果: `{preview}`\n")
+            else:
+                error = result.get("error", "未知错误")
+                parts.append(f"   ❌ 失败: {error}\n")
+            parts.append(f"   ⏱ 耗时: {exec_time:.2f}s\n\n")
+            
+            yield push_content("".join(parts))
         
-        # 逐字符流式推送内容（打字机效果）
-        async def stream_text(text: str, chunk_size: int = 3):
-            """将文本按小段推送，模拟打字机效果"""
-            i = 0
-            while i < len(text):
-                chunk = text[i:i + chunk_size]
-                yield format_sse({
-                    "id": chat_id,
-                    "object": "chat.completion.chunk",
-                    "choices": [{"delta": {"content": chunk}, "index": 0}]
-                })
-                i += chunk_size
-                # 小段间极短延迟，让浏览器能渲染
-                if i % 60 == 0:
-                    await asyncio.sleep(0.01)
+        # ---- 调用带回调的 process_query_stream ----
+        try:
+            async for event in orchestrator.process_query_stream(query):
+                event_type = event.get("type")
+                
+                if event_type == "thinking_start":
+                    iteration = event.get("iteration", 1)
+                    yield push_content(f"\n\n🔄 **第{iteration}轮思考中...**\n\n")
+                
+                elif event_type == "thinking_result":
+                    iteration = event.get("iteration", 1)
+                    reasoning = event.get("reasoning", "")
+                    decision = event.get("decision", {})
+                    
+                    parts = []
+                    if reasoning:
+                        preview = reasoning[:500] + ("..." if len(reasoning) > 500 else "")
+                        parts.append(f"💭 *推理摘要*: {preview}\n\n")
+                    
+                    if decision.get("is_final"):
+                        parts.append("✅ **已得到最终答案**\n\n")
+                    elif decision.get("tool_name"):
+                        tool_name = decision["tool_name"]
+                        tool_args = decision.get("tool_args", {})
+                        args_str = json.dumps(tool_args, ensure_ascii=False) if tool_args else ""
+                        parts.append(f"🔧 **调用工具**: `{tool_name}`\n")
+                        if args_str:
+                            parts.append(f"   参数: `{args_str[:200]}`\n")
+                        parts.append("\n")
+                    
+                    if parts:
+                        yield push_content("".join(parts))
+                
+                elif event_type == "tool_result":
+                    tool_name = event.get("tool_name", "")
+                    tool_result = event.get("result", {})
+                    exec_time = event.get("execution_time", 0)
+                    
+                    parts = []
+                    if tool_result.get("success"):
+                        data = tool_result.get("data", tool_result)
+                        if isinstance(data, dict):
+                            if "task_id" in data:
+                                parts.append(f"   ✅ 返回 task_id: `{data['task_id']}`\n")
+                            elif "servers" in data:
+                                servers = data.get("servers", [])
+                                parts.append(f"   ✅ 找到 {len(servers)} 台服务器\n")
+                            elif "status" in data:
+                                parts.append(f"   ✅ 状态: {data['status']}\n")
+                            else:
+                                preview = json.dumps(data, ensure_ascii=False)[:300]
+                                parts.append(f"   ✅ 结果: `{preview}`\n")
+                        else:
+                            preview = str(data)[:200]
+                            parts.append(f"   ✅ 结果: `{preview}`\n")
+                    else:
+                        error = tool_result.get("error", "未知错误")
+                        parts.append(f"   ❌ 失败: {error}\n")
+                    parts.append(f"   ⏱ 耗时: {exec_time:.2f}s\n\n")
+                    
+                    yield push_content("".join(parts))
+                
+                elif event_type == "workflow_progress":
+                    # 工作流模式进度
+                    node = event.get("current_node", "")
+                    status = event.get("status", "")
+                    scenario = event.get("scenario", "")
+                    icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(status, "⬜")
+                    yield push_content(f"{icon} **[{scenario}]** {node}: {status}\n")
+                
+                elif event_type == "done":
+                    # 最终结果
+                    result = event.get("result", {})
+                    
+                    # 如果之前没拿到 trace_id，尝试从结果中获取
+                    if not trace_id_hex and result.get("trace_id"):
+                        trace_id_hex = result.get("trace_id")
+                    
+                    # 推送最终结果
+                    yield push_content("\n\n---\n\n## 📋 执行结果\n\n")
+                    final_content = result.get("result", "")
+                    if final_content:
+                        yield push_content(final_content)
+                    
+                    # 性能统计
+                    execution_time = result.get("execution_time", 0)
+                    tool_calls = result.get("tool_calls", [])
+                    mode = result.get("mode", "react")
+                    stats = f"\n\n---\n\n⏱️ **性能统计**\n- 执行模式：{'工作流' if mode == 'workflow' else 'ReAct'}\n- 总耗时：{execution_time:.2f}秒\n- 工具调用：{len(tool_calls)}次\n"
+                    if trace_id_hex:
+                        stats += f"- 🔗 [查看 Trace 链路](/api/jaeger/trace/{trace_id_hex})\n"
+                    yield push_content(stats)
+                    
+                    # Finish with metadata
+                    finish_data = {
+                        "id": chat_id,
+                        "object": "chat.completion.chunk",
+                        "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}]
+                    }
+                    if trace_id_hex:
+                        finish_data["trace_id"] = trace_id_hex
+                        finish_data["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+                    
+                    if result.get("node_statuses"):
+                        finish_data["workflow"] = {
+                            "scenario": result.get("scenario", ""),
+                            "node_statuses": result.get("node_statuses", {}),
+                            "completed_nodes": result.get("completed_nodes", []),
+                            "current_node": result.get("current_node"),
+                        }
+                    
+                    yield format_sse(finish_data)
+                    yield "data: [DONE]\n\n"
+                    return
         
-        # Stream thinking process
-        thinking = result.get("thinking_process", "")
-        if thinking:
-            async for chunk in stream_text("## 💭 思考过程\n\n"):
-                yield chunk
-            async for chunk in stream_text(thinking):
-                yield chunk
-            async for chunk in stream_text("\n\n---\n\n"):
-                yield chunk
-        
-        # Stream result
-        async for chunk in stream_text("## ✅ 执行结果\n\n"):
-            yield chunk
-        content = result.get("result", "")
-        async for chunk in stream_text(content):
-            yield chunk
-        
-        # Stream performance stats + trace link
-        execution_time = result.get("execution_time", 0)
-        tool_calls = result.get("tool_calls", [])
-        
-        stats_content = f"\n\n---\n\n⏱️ **性能统计**\n- 总耗时：{execution_time:.2f}秒\n- 工具调用：{len(tool_calls)}次\n"
-        if trace_id_hex:
-            stats_content += f"- 🔗 [查看 Trace 链路](/api/jaeger/trace/{trace_id_hex})\n"
-        
-        async for chunk in stream_text(stats_content):
-            yield chunk
-        
-        # Stream finish with metadata
-        finish_data = {
-            "id": chat_id,
-            "object": "chat.completion.chunk",
-            "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}]
-        }
-        if trace_id_hex:
-            finish_data["trace_id"] = trace_id_hex
-            finish_data["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
-        
-        if result.get("node_statuses"):
-            finish_data["workflow"] = {
-                "scenario": result.get("scenario", ""),
-                "node_statuses": result.get("node_statuses", {}),
-                "completed_nodes": result.get("completed_nodes", []),
-                "current_node": result.get("current_node"),
+        except AttributeError:
+            # 如果 orchestrator 没有 process_query_stream，降级到同步模式
+            logger.warning("process_query_stream 不可用，降级到同步流式")
+            result = await orchestrator.process_query(query)
+            
+            if not trace_id_hex and result.get("trace_id"):
+                trace_id_hex = result.get("trace_id")
+            
+            # 推送完整结果
+            thinking = result.get("thinking_process", "")
+            if thinking:
+                yield push_content("## 💭 思考过程\n\n")
+                yield push_content(thinking)
+                yield push_content("\n\n---\n\n")
+            
+            yield push_content("## ✅ 执行结果\n\n")
+            yield push_content(result.get("result", ""))
+            
+            execution_time = result.get("execution_time", 0)
+            tool_calls = result.get("tool_calls", [])
+            stats = f"\n\n---\n\n⏱️ **性能统计**\n- 总耗时：{execution_time:.2f}秒\n- 工具调用：{len(tool_calls)}次\n"
+            if trace_id_hex:
+                stats += f"- 🔗 [查看 Trace 链路](/api/jaeger/trace/{trace_id_hex})\n"
+            yield push_content(stats)
+            
+            finish_data = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}]
             }
-        
-        yield format_sse(finish_data)
-        
-        # End stream
-        yield "data: [DONE]\n\n"
+            if trace_id_hex:
+                finish_data["trace_id"] = trace_id_hex
+                finish_data["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+            if result.get("node_statuses"):
+                finish_data["workflow"] = {
+                    "scenario": result.get("scenario", ""),
+                    "node_statuses": result.get("node_statuses", {}),
+                    "completed_nodes": result.get("completed_nodes", []),
+                    "current_node": result.get("current_node"),
+                }
+            yield format_sse(finish_data)
+            yield "data: [DONE]\n\n"
+            return
     
     except Exception as e:
         logger.error(f"Stream error: {str(e)}")

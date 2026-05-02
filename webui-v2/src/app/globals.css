@@ -68,9 +68,10 @@
 
 .message-user {
   margin-left: auto;
-  background: rgba(0, 217, 166, 0.12);
-  border: 1px solid rgba(0, 217, 166, 0.25);
+  background: rgba(0, 217, 166, 0.15);
+  border: 1px solid rgba(0, 217, 166, 0.35);
   color: var(--color-text-primary);
+  font-weight: 500;
   animation: messageSlideInRight 0.3s ease-out;
 }
 

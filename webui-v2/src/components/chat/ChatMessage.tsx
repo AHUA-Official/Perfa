@@ -29,7 +29,7 @@ export default function ChatMessage({ message }: Props) {
         </div>
         <div className="flex-1 min-w-0">
           {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <div className="whitespace-pre-wrap text-[15px] leading-relaxed">{message.content}</div>
           ) : (
             <div className="markdown-body">
               <ReactMarkdown

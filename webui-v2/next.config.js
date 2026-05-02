@@ -2,7 +2,7 @@
 const nextConfig = {
   async rewrites() {
     return [
-      // Agent API 代理
+      // Agent API 代理（chat/completions 由 API Route 单独处理，绕过 SSE 缓冲问题）
       {
         source: '/api/v1/:path*',
         destination: 'http://localhost:10000/v1/:path*',
