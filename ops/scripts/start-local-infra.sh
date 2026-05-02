@@ -75,7 +75,7 @@ if pgrep -f "$NODE_AGENT_CMD" > /dev/null; then
     echo "      Node Agent 已在运行"
 else
     cd "$AGENT_DIR"
-    nohup python3 "$NODE_AGENT_CMD" > /tmp/agent.log 2>&1 &
+    setsid bash -lc "cd '$AGENT_DIR' && exec nohup python3 '$NODE_AGENT_CMD' </dev/null >/tmp/agent.log 2>&1" >/dev/null 2>&1 &
 
     sleep 2
     if pgrep -f "$NODE_AGENT_CMD" > /dev/null; then

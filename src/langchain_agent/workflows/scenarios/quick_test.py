@@ -18,6 +18,7 @@ from langchain_agent.workflows.nodes import (
     collect_results,
     generate_report,
     handle_error,
+    route_after_server_selection,
 )
 
 
@@ -40,7 +41,11 @@ def build_quick_test_graph(tools: dict, llm=None):
     # 定义边
     graph.set_entry_point("check_environment")
     graph.add_edge("check_environment", "select_server")
-    graph.add_edge("select_server", "run_test")
+    graph.add_conditional_edges(
+        "select_server",
+        route_after_server_selection,
+        {"handle_error": "handle_error", "proceed": "run_test"}
+    )
     graph.add_edge("run_test", "collect_results")
     graph.add_edge("collect_results", "generate_report")
     graph.add_edge("generate_report", END)

@@ -1,6 +1,7 @@
 """配置管理"""
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -26,11 +27,12 @@ class Config:
     @classmethod
     def from_env(cls) -> "Config":
         """从环境变量加载配置"""
+        default_db_path = Path(__file__).resolve().parents[2] / "data" / "mcp" / "perfa_mcp.db"
         return cls(
             host=os.getenv("MCP_HOST", "0.0.0.0"),
             port=int(os.getenv("MCP_PORT", "9000")),
             api_key=os.getenv("MCP_API_KEY", ""),
-            db_path=os.getenv("MCP_DB_PATH", "/var/lib/mcp/mcp.db"),
+            db_path=os.getenv("MCP_DB_PATH", str(default_db_path)),
             agent_timeout=int(os.getenv("MCP_AGENT_TIMEOUT", "30")),
             callback_enabled=os.getenv("MCP_CALLBACK_ENABLED", "true").lower() == "true",
         )

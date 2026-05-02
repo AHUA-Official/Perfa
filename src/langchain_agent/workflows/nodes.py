@@ -90,6 +90,29 @@ def _update_node_status(state: WorkflowState, node_name: str, status: str) -> di
     }
 
 
+def _parse_tool_result_payload(result: Any) -> dict:
+    """统一解析 MCP/LangChain 工具返回的 dict/string 结果"""
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, str):
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _extract_server_identity(server: dict) -> tuple[str, str, str, str]:
+    """兼容不同服务器字段命名"""
+    server_id = server.get("server_id") or server.get("id") or ""
+    server_ip = server.get("ip") or server.get("host") or ""
+    agent_id = server.get("agent_id") or ""
+    agent_status = server.get("agent_status") or server.get("status") or "unknown"
+    return server_id, server_ip, agent_id, agent_status
+
+
 def make_node(fn: Callable, **kwargs) -> Callable:
     """
     节点工厂函数
@@ -201,31 +224,29 @@ async def check_environment(state: WorkflowState, *, tools: dict = None) -> dict
                 servers_result = list_servers_tool.run({})
             
             servers = []
-            if isinstance(servers_result, dict):
-                servers = servers_result.get("servers", [])
-            elif isinstance(servers_result, str):
-                try:
-                    parsed = json.loads(servers_result)
-                    servers = parsed.get("servers", [])
-                except json.JSONDecodeError:
-                    pass
+            parsed_servers_result = _parse_tool_result_payload(servers_result)
+            if parsed_servers_result.get("success") is False:
+                raise RuntimeError(parsed_servers_result.get("error", "list_servers 调用失败"))
+            if parsed_servers_result:
+                servers = parsed_servers_result.get("servers", [])
             
             if servers:
                 first_server = servers[0]
-                server_id = first_server.get("id", "")
-                server_ip = first_server.get("ip", first_server.get("host", ""))
+                server_id, server_ip, agent_id, agent_status = _extract_server_identity(first_server)
                 
-                updates["server_id"] = server_id
-                updates["server_ip"] = server_ip
-                updates["agent_id"] = first_server.get("agent_id", "")
-                updates["agent_status"] = first_server.get("status", "unknown")
+                if server_id:
+                    updates["server_id"] = server_id
+                if server_ip:
+                    updates["server_ip"] = server_ip
+                updates["agent_id"] = agent_id
+                updates["agent_status"] = agent_status
                 
                 # OTel: 记录服务器选择决策
                 if _current_span and _current_span.is_recording():
                     _current_span.add_event("decision.server_selected", {
                         "server_ip": server_ip,
                         "server_id": server_id,
-                        "agent_status": first_server.get("status", "unknown"),
+                        "agent_status": agent_status,
                         "total_servers_found": len(servers),
                         "reason": "first_available" if len(servers) == 1 else "default_first",
                     })
@@ -238,6 +259,7 @@ async def check_environment(state: WorkflowState, *, tools: dict = None) -> dict
                     "error": "没有已注册的服务器",
                     "detail": "请先注册服务器并部署 Agent"
                 }]
+                updates["status"] = "failed"
                 if _current_span and _current_span.is_recording():
                     _current_span.add_event("decision.no_server", {
                         "reason": "no_registered_servers",
@@ -251,26 +273,24 @@ async def check_environment(state: WorkflowState, *, tools: dict = None) -> dict
         
         # 调用 list_tools 获取可用工具列表
         list_tools_tool = tools.get("list_tools")
-        if list_tools_tool:
+        target_server_id = updates.get("server_id", state.get("server_id", ""))
+        if list_tools_tool and target_server_id:
             if hasattr(list_tools_tool, 'ainvoke'):
-                tools_result = await list_tools_tool.ainvoke({"server_id": updates.get("server_id", state.get("server_id", ""))})
+                tools_result = await list_tools_tool.ainvoke({"server_id": target_server_id})
             else:
-                tools_result = list_tools_tool.run({"server_id": updates.get("server_id", state.get("server_id", ""))})
+                tools_result = list_tools_tool.run({"server_id": target_server_id})
             
             available_tools = []
-            if isinstance(tools_result, dict):
-                tool_list = tools_result.get("tools", [])
-                available_tools = [t.get("name", "") for t in tool_list if isinstance(t, dict)]
-            elif isinstance(tools_result, str):
-                try:
-                    parsed = json.loads(tools_result)
-                    tool_list = parsed.get("tools", [])
-                    available_tools = [t.get("name", "") for t in tool_list if isinstance(t, dict)]
-                except json.JSONDecodeError:
-                    pass
+            parsed_tools_result = _parse_tool_result_payload(tools_result)
+            if parsed_tools_result.get("success") is False:
+                raise RuntimeError(parsed_tools_result.get("error", "list_tools 调用失败"))
+            tool_list = parsed_tools_result.get("tools", [])
+            available_tools = [t.get("name", "") for t in tool_list if isinstance(t, dict)]
             
             updates["available_tools"] = available_tools
             logger.info(f"[Workflow] 可用工具: {available_tools}")
+        elif list_tools_tool and not target_server_id:
+            logger.warning("[Workflow] 跳过 list_tools：当前没有有效的 server_id")
         
         updates.update(_update_node_status(state, "check_environment", "completed"))
         logger.info("[Workflow] 环境检查完成")
@@ -310,14 +330,11 @@ async def select_server(state: WorkflowState, *, tools: dict = None) -> dict:
                 servers_result = list_servers_tool.run({})
 
             servers = []
-            if isinstance(servers_result, dict):
-                servers = servers_result.get("servers", [])
-            elif isinstance(servers_result, str):
-                try:
-                    parsed = json.loads(servers_result)
-                    servers = parsed.get("servers", [])
-                except json.JSONDecodeError:
-                    pass
+            parsed_servers_result = _parse_tool_result_payload(servers_result)
+            if parsed_servers_result.get("success") is False:
+                raise RuntimeError(parsed_servers_result.get("error", "list_servers 调用失败"))
+            if parsed_servers_result:
+                servers = parsed_servers_result.get("servers", [])
 
             if servers:
                 # 尝试匹配用户查询中的 IP
@@ -337,10 +354,11 @@ async def select_server(state: WorkflowState, *, tools: dict = None) -> dict:
                 if not selected:
                     selected = servers[0]
 
-                updates["server_id"] = selected.get("server_id", selected.get("id", ""))
-                updates["server_ip"] = selected.get("ip", selected.get("host", ""))
-                updates["agent_id"] = selected.get("agent_id", "")
-                updates["agent_status"] = selected.get("status", "unknown")
+                server_id, server_ip, agent_id, agent_status = _extract_server_identity(selected)
+                updates["server_id"] = server_id
+                updates["server_ip"] = server_ip
+                updates["agent_id"] = agent_id
+                updates["agent_status"] = agent_status
                 logger.info(f"[Workflow] 选择服务器: {updates['server_ip']} (id={updates['server_id']})")
         except Exception as e:
             logger.error(f"[Workflow] 选择服务器失败: {e}")
@@ -351,6 +369,7 @@ async def select_server(state: WorkflowState, *, tools: dict = None) -> dict:
             "error": "无法选择目标服务器",
             "detail": "没有可用的服务器"
         }]
+        updates["status"] = "failed"
         updates.update(_update_node_status(state, "select_server", "failed"))
     else:
         updates.update(_update_node_status(state, "select_server", "completed"))
@@ -364,6 +383,16 @@ async def check_tools(state: WorkflowState, *, required_tools: list = None, tool
     """
     logger.info(f"[Workflow] 检查工具节点开始，所需工具: {required_tools}")
     updates = _update_node_status(state, "check_tools", "running")
+
+    if not state.get("server_id"):
+        updates["missing_tools"] = list(required_tools or [])
+        updates["errors"] = list(state.get("errors", [])) + [{
+            "node": "check_tools",
+            "error": "无法检查工具",
+            "detail": "当前没有有效的 server_id",
+        }]
+        updates.update(_update_node_status(state, "check_tools", "failed"))
+        return updates
     
     available = set(state.get("available_tools", []))
     required = set(required_tools or [])
@@ -391,6 +420,16 @@ async def install_tools(state: WorkflowState, *, tools: dict = None) -> dict:
     
     server_id = state.get("server_id", "")
     install_tool = tools.get("install_tool")
+
+    if not server_id:
+        updates["tool_install_failed"] = True
+        updates["errors"] = list(state.get("errors", [])) + [{
+            "node": "install_tools",
+            "error": "无法安装工具",
+            "detail": "当前没有有效的 server_id",
+        }]
+        updates.update(_update_node_status(state, "install_tools", "failed"))
+        return updates
     
     if not missing or not install_tool:
         logger.info("[Workflow] 无需安装工具或 install_tool 不可用")
@@ -741,9 +780,9 @@ async def generate_report(state: WorkflowState, *, llm=None, tools: dict = None)
     
     # 如果有 generate_report 工具，先用它
     report_tool = tools.get("generate_report") if tools else None
-    if report_tool:
+    server_id = state.get("server_id", "")
+    if report_tool and server_id:
         try:
-            server_id = state.get("server_id", "")
             args = {"server_id": server_id}
             if hasattr(report_tool, 'ainvoke'):
                 report_result = await report_tool.ainvoke(args)
@@ -756,6 +795,8 @@ async def generate_report(state: WorkflowState, *, llm=None, tools: dict = None)
                 return updates
         except Exception as e:
             logger.warning(f"[Workflow] generate_report 工具调用失败: {e}，降级到 LLM 生成")
+    elif report_tool and not server_id:
+        logger.warning("[Workflow] 跳过 generate_report 工具：当前没有有效的 server_id，降级到 LLM 生成")
     
     # 降级: 使用 LLM 生成报告
     if llm:
@@ -912,7 +953,30 @@ def route_after_tool_check(state: WorkflowState) -> str:
     """
     条件边: 工具检查后的路由
     """
+    node_statuses = state.get("node_statuses", {})
+    if node_statuses.get("check_tools") == "failed" or not state.get("server_id"):
+        return "handle_error"
     missing = state.get("missing_tools", [])
     if missing:
         return "install_tools"
+    return "proceed"
+
+
+def route_after_server_selection(state: WorkflowState) -> str:
+    """
+    条件边: 服务器选择后的路由
+    """
+    node_statuses = state.get("node_statuses", {})
+    if node_statuses.get("select_server") == "failed" or not state.get("server_id"):
+        return "handle_error"
+    return "proceed"
+
+
+def route_after_install(state: WorkflowState) -> str:
+    """
+    条件边: 工具安装后的路由
+    """
+    node_statuses = state.get("node_statuses", {})
+    if node_statuses.get("install_tools") == "failed" or state.get("tool_install_failed"):
+        return "handle_error"
     return "proceed"

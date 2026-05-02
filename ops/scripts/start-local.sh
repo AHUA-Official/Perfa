@@ -34,7 +34,7 @@ echo "[1/4] 启动本地基础设施..."
 bash "$SCRIPT_DIR/start-local-infra.sh"
 
 echo "[2/4] 启动 MCP Server..."
-nohup bash "$SCRIPT_DIR/start-mcp-server.sh" >/tmp/perfa_mcp.log 2>&1 &
+bash "$SCRIPT_DIR/start-mcp-server.sh" --daemon
 wait_for_http "http://127.0.0.1:9000/sse?api_key=test-key-123" "MCP Server" 30 HEAD
 
 echo "[3/4] 启动 LangChain 后端..."

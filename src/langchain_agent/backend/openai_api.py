@@ -109,6 +109,8 @@ async def chat_completions(request: ChatRequest):
             )]
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Chat completion error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -600,6 +602,8 @@ class RegisterServerRequest(BaseModel):
     ssh_user: str = Field(..., description="SSH 用户名")
     ssh_password: Optional[str] = Field(None, description="SSH 密码")
     ssh_key_path: Optional[str] = Field(None, description="SSH 密钥路径")
+    privilege_mode: str = Field("root", description="提权模式: root/sudo_nopasswd/sudo_password/none")
+    sudo_password: Optional[str] = Field(None, description="sudo 密码")
     alias: Optional[str] = Field(None, description="服务器别名")
     tags: List[str] = Field(default_factory=list, description="标签")
 
@@ -608,6 +612,7 @@ class AgentDeployRequest(BaseModel):
     """Agent 部署请求"""
     force_reinstall: bool = Field(default=False, description="是否强制重装")
     agent_only: bool = Field(default=True, description="是否仅重装 node_agent")
+    install_dir: Optional[str] = Field(default=None, description="远端安装目录")
 
 
 class AgentUninstallRequest(BaseModel):
@@ -634,6 +639,10 @@ async def register_server(req: RegisterServerRequest):
             args["ssh_password"] = req.ssh_password
         if req.ssh_key_path:
             args["ssh_key_path"] = req.ssh_key_path
+        if req.privilege_mode:
+            args["privilege_mode"] = req.privilege_mode
+        if req.sudo_password:
+            args["sudo_password"] = req.sudo_password
         if req.alias:
             args["alias"] = req.alias
         if req.tags:
@@ -708,6 +717,7 @@ async def deploy_server_agent(server_id: str, req: AgentDeployRequest):
             "server_id": server_id,
             "force_reinstall": req.force_reinstall,
             "agent_only": req.agent_only,
+            **({"install_dir": req.install_dir} if req.install_dir else {}),
         })
 
         if isinstance(result, str):

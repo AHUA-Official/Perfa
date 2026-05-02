@@ -1,0 +1,82 @@
+[
+  {
+    "id": "cpu_focus_basic",
+    "name": "CPU 场景基础用例",
+    "prompt": "测试 CPU 性能，给我一个可执行的测试流程，优先走自动工作流。",
+    "ai_judge_prompt": "请根据给定的 prompt、预期、SSE 事件、workflow、最终回答、session detail，判断这个 CPU 场景是否通过。输出 JSON，字段必须包含 verdict(PASS/FAIL/UNSURE)、reason、confidence、evidence。",
+    "expectations": [
+      "应该进入 workflow 或至少给出明确的 CPU 测试方案",
+      "上下文里应能看到 scenario、workflow_progress 或工具调用信息",
+      "回答中应出现 CPU、unixbench、superpi、stream、mlc 之一"
+    ],
+    "review_hints": [
+      "检查 summary/workflow 是否是 cpu_focus",
+      "检查 events 里是否出现 workflow_progress 或 tool_result",
+      "检查最终回答是否与 CPU 性能测试相关"
+    ]
+  },
+  {
+    "id": "storage_focus_basic",
+    "name": "存储场景基础用例",
+    "prompt": "测试磁盘 IO 性能，重点看随机读写和吞吐，自动选择合适流程。",
+    "ai_judge_prompt": "请根据给定的 prompt、预期、SSE 事件、workflow、最终回答、session detail，判断这个存储场景是否通过。输出 JSON，字段必须包含 verdict(PASS/FAIL/UNSURE)、reason、confidence、evidence。",
+    "expectations": [
+      "应该进入存储测试相关流程",
+      "上下文里应出现 fio 或 storage_focus 相关信息",
+      "回答应体现磁盘 IO、随机读写、吞吐等内容"
+    ],
+    "review_hints": [
+      "检查 workflow scenario 是否是 storage_focus",
+      "检查 events/tool_result 是否出现 fio",
+      "检查最终回答是否围绕磁盘 IO"
+    ]
+  },
+  {
+    "id": "network_focus_basic",
+    "name": "网络场景基础用例",
+    "prompt": "测试网络性能，想看延迟和基础连通性，自动执行合适方案。",
+    "ai_judge_prompt": "请根据给定的 prompt、预期、SSE 事件、workflow、最终回答、session detail，判断这个网络场景是否通过。输出 JSON，字段必须包含 verdict(PASS/FAIL/UNSURE)、reason、confidence、evidence。",
+    "expectations": [
+      "应该进入网络测试相关流程",
+      "上下文里应出现 hping3 或 network_focus 相关信息",
+      "回答应体现网络延迟、连通性或网络测试建议"
+    ],
+    "review_hints": [
+      "检查 workflow scenario 是否是 network_focus",
+      "检查 events/tool_result 是否出现 hping3",
+      "检查最终回答是否围绕网络性能"
+    ]
+  },
+  {
+    "id": "full_assessment_server",
+    "name": "服务器全面评估用例",
+    "prompt": "对服务器 web-server (118.25.19.83) 执行性能测试，给出完整过程和最终总结。",
+    "ai_judge_prompt": "请根据给定的 prompt、预期、SSE 事件、workflow、最终回答、session detail，判断这个服务器全面评估场景是否通过。输出 JSON，字段必须包含 verdict(PASS/FAIL/UNSURE)、reason、confidence、evidence。",
+    "expectations": [
+      "应该选择目标服务器并进入完整评估流程",
+      "上下文里应出现 server_id、server_ip、workflow_progress 或工具调用",
+      "回答应体现完整评估或失败原因，而不是空响应"
+    ],
+    "review_hints": [
+      "检查 events 中是否出现 select_server、install_tools、run_* 节点",
+      "检查上下文里是否选中了 118.25.19.83",
+      "检查最终回答是否与完整性能评估一致"
+    ]
+  },
+  {
+    "id": "multi_turn_followup",
+    "name": "多轮上下文跟进用例",
+    "prompt": "先帮我设计一个 CPU 测试方案，后续我会追加 superpi 对比需求。",
+    "ai_judge_prompt": "请根据给定的 prompt、预期、SSE 事件、workflow、最终回答、session detail，判断这个多轮上下文起始场景是否通过。输出 JSON，字段必须包含 verdict(PASS/FAIL/UNSURE)、reason、confidence、evidence。",
+    "expectations": [
+      "首轮应该给出 CPU 测试方案或进入 CPU 工作流",
+      "session 历史应可见这轮消息",
+      "适合作为后续人工继续追问的上下文起点"
+    ],
+    "review_hints": [
+      "检查 session detail 是否保留 user/assistant 消息",
+      "检查 summary/workflow 是否和 CPU 方案相关",
+      "检查回答是否可继续追问 superpi"
+    ]
+  }
+]

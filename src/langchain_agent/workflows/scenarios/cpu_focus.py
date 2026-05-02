@@ -21,6 +21,8 @@ from langchain_agent.workflows.nodes import (
     generate_report,
     handle_error,
     route_after_tool_check,
+    route_after_server_selection,
+    route_after_install,
 )
 
 
@@ -47,13 +49,21 @@ def build_cpu_focus_graph(tools: dict, llm=None):
     
     graph.set_entry_point("check_environment")
     graph.add_edge("check_environment", "select_server")
-    graph.add_edge("select_server", "check_tools")
+    graph.add_conditional_edges(
+        "select_server",
+        route_after_server_selection,
+        {"handle_error": "handle_error", "proceed": "check_tools"}
+    )
     graph.add_conditional_edges(
         "check_tools",
         route_after_tool_check,
-        {"install_tools": "install_tools", "proceed": "unixbench_test"}
+        {"handle_error": "handle_error", "install_tools": "install_tools", "proceed": "unixbench_test"}
     )
-    graph.add_edge("install_tools", "unixbench_test")
+    graph.add_conditional_edges(
+        "install_tools",
+        route_after_install,
+        {"handle_error": "handle_error", "proceed": "unixbench_test"}
+    )
     graph.add_edge("unixbench_test", "superpi_test")
     graph.add_edge("superpi_test", "collect_results")
     graph.add_edge("collect_results", "generate_report")
