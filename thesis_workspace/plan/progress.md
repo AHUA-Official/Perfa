@@ -338,3 +338,21 @@
 - Artifacts produced: 6 个新增 draw.io XML 图源、1 个旧图重编号、更新后的图表数据清单、第四章和第五章图号占位。
 - Verification run: `python3 -m xml.etree.ElementTree` 分别检查 `figure_4_1_node_agent_internal_structure.drawio`, `figure_4_2_benchmark_task_lifecycle.drawio`, `figure_4_3_mcp_tool_call_flow.drawio`, `figure_4_4_langchain_workflow_orchestration.drawio`, `figure_4_5_webui_v2_page_dataflow.drawio`, `figure_5_1_system_test_validation_flow.drawio`, `figure_4_6_report_knowledge_boundary.drawio`; `rg -n "图 4-1|图 4-2|图 4-3|图 4-4|图 4-5|图 4-6|图 5-1" chapters/04_detailed_design_and_implementation.md chapters/05_testing_and_results.md figures/data-manifest.md`; `rg --files figures/drawio | sort`
 - Remaining risk: 需要在 diagrams.net 中人工打开检查版面细节，并导出适合 Word 的 PNG；第二优先级图 2-1 和图 5-2 尚未生成。
+
+## 2026-05-03 - 00 摘要按评论修订
+
+- 阶段：S5 Review / S4 Revision
+- 状态：已按用户评论修订，待用户复审
+- 输出文件：`thesis_workspace/chapters/00_abstract.md`
+- 备忘录：`thesis_workspace/plan/comment-memo.md`
+- 主要调整：删除“故障定位”和“基于 Perfa 项目”表述；将架构描述从具体技术栈改为四个逻辑层级；将关键词“可观测性”改为“运行监控”；弱化“前端契约测试”和“基础能力”；解释报告回溯对应原始 Benchmark 结果、任务标识和工具调用记录；删除摘要末尾的负面收尾。
+
+### Capability-use audit
+
+- Required skills: writing-core, prompts-collection, verification
+- Skills actually used: writing-core, prompts-collection, verification
+- Inputs consumed: `chapters/00_abstract.md`, 用户本轮正文内 `@cmt` 评论和总体问题
+- Inputs not used and why: 未改动其他章节，因为本轮只试改 00 摘要。
+- Artifacts produced: 修订后的中英文摘要、关键词、评论备忘录记录。
+- Verification run: `rg -n "@cmt|故障定位|基于 Perfa|WebUI V2|LangChain Agent|Node Agent|基础能力|可观测性|observability|target node|node execution layer|首先|其次|最后|此外|另外|接下来|总之|值得注意的是|需要指出的是|重要的是|显而易见|非常|极其|十分|相当|我认为|我觉得" chapters/00_abstract.md`; `sed -n '3,7p' chapters/00_abstract.md | wc -m`; `sed -n '13,17p' chapters/00_abstract.md | wc -w`; `wc -m chapters/00_abstract.md plan/comment-memo.md`
+- Remaining risk: 中文摘要约 631 字，若学校或模板严格要求 300-500 字，后续需要单独压缩。
