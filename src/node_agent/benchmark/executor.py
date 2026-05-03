@@ -2,6 +2,7 @@
 压测任务执行器
 """
 import os
+import json
 import signal
 import threading
 import logging
@@ -15,6 +16,7 @@ import select
 from .task import BenchmarkTask, TaskStatus
 from .result import ResultCollector
 from .cleaner import Cleaner
+from .environment import EnvironmentSnapshotCollector
 from .runners.base import BaseRunner
 
 
@@ -65,6 +67,7 @@ class BenchmarkExecutor:
         self.tool_manager = tool_manager
         self.result_collector = ResultCollector(data_dir)
         self.cleaner = Cleaner()
+        self.environment_collector = EnvironmentSnapshotCollector()
         self.working_dir = Path(working_dir)
         
         # 任务管理
@@ -225,6 +228,16 @@ class BenchmarkExecutor:
             
             # 测试前清理
             self.cleaner.cleanup_before(task.working_dir, task.test_name)
+
+            # 执行前采集被测节点现场，供日志、raw_results 和 AI 报告判断可信度。
+            task.environment_snapshot = self.environment_collector.collect(task.working_dir)
+            self._append_log(log_path, "\n" + "="*60 + "\n")
+            self._append_log(log_path, "Environment Snapshot Before Benchmark\n")
+            self._append_log(log_path, "="*60 + "\n")
+            self._append_log(log_path, json.dumps(task.environment_snapshot, indent=2, ensure_ascii=False))
+            self._append_log(log_path, "\n" + "="*60 + "\n")
+            self._append_log(log_path, "Execution Log\n")
+            self._append_log(log_path, "="*60 + "\n\n")
             
             # ========== 执行阶段 ==========
             self._update_status(task, TaskStatus.RUNNING)
@@ -342,6 +355,11 @@ class BenchmarkExecutor:
                     pass
                 except Exception as exc:
                     logger.warning(f"Failed to stop iperf3 helper server {iperf3_server_pid}: {exc}")
+            if task.process and task.process.stdout:
+                try:
+                    task.process.stdout.close()
+                except Exception:
+                    pass
             task.process = None
 
     def _cleanup_finished_current_task(self):

@@ -34,6 +34,7 @@ class BenchmarkTask:
     end_time: Optional[datetime] = None
     result: Optional[Dict[str, Any]] = None     # 测试结果
     error: Optional[str] = None                 # 错误信息
+    environment_snapshot: Optional[Dict[str, Any]] = None  # 执行前环境证据
     
     # 文件路径
     working_dir: Optional[str] = None           # 工作目录
@@ -61,6 +62,7 @@ class BenchmarkTask:
             "end_time": self.end_time.isoformat() if self.end_time else None,
             "result": self.result,
             "error": self.error,
+            "environment_snapshot": self.environment_snapshot,
             "working_dir": self.working_dir,
             "output_file": self.output_file,
             "log_file": self.log_file,

@@ -97,10 +97,13 @@ class ResultCollector:
 
     def collect(self, task: BenchmarkTask, metrics: Optional[Dict] = None) -> BenchmarkResult:
         sys_info = self._get_system_info()
+        metrics_with_evidence = dict(metrics or {})
+        if task.environment_snapshot:
+            metrics_with_evidence["environment_snapshot"] = task.environment_snapshot
         result = BenchmarkResult(
             task_id=task.task_id, test_name=task.test_name, status=task.status.value,
             start_time=task.start_time, end_time=task.end_time, duration_seconds=task.duration_seconds,
-            params=task.params, metrics=metrics, hostname=sys_info['hostname'],
+            params=task.params, metrics=metrics_with_evidence or None, hostname=sys_info['hostname'],
             os_info=sys_info['os_info'], kernel_version=sys_info['kernel_version'],
             cpu_model=sys_info['cpu_model'], log_file=task.log_file,
             raw_output_file=task.output_file, error_message=task.error, created_at=datetime.now()
