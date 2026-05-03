@@ -46,6 +46,35 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
+
+@app.middleware("http")
+async def trace_http_request(request, call_next):
+    """Create a Perfa span for every backend HTTP request."""
+    try:
+        from opentelemetry.sdk.trace import Status, StatusCode
+        from langchain_agent.observability.tracer import get_tracer
+
+        tracer = get_tracer()
+        if tracer is None:
+            return await call_next(request)
+
+        with tracer.start_as_current_span(f"{request.method} {request.url.path}") as span:
+            span.set_attribute("http.method", request.method)
+            span.set_attribute("http.route", request.url.path)
+            response = await call_next(request)
+            span.set_attribute("http.status_code", response.status_code)
+            if response.status_code >= 500:
+                span.set_status(Status(StatusCode.ERROR))
+            return response
+    except Exception as exc:
+        try:
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            span.record_exception(exc)
+        except Exception:
+            pass
+        raise
+
+
 # Include routers
 app.include_router(openai_router, prefix="/v1")
 

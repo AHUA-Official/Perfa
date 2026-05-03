@@ -29,6 +29,8 @@ fi
 
 PORT=${LANGCHAIN_API_PORT:-10000}
 export PYTHONPATH="$SRC_DIR:$PYTHONPATH"
+export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-127.0.0.1:4317}"
+export OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-perfa-agent}"
 
 if [ "$MODE" = "--foreground" ]; then
     cd "$SRC_DIR"
@@ -50,7 +52,7 @@ fi
 
 cd "$SRC_DIR"
 tmux new-session -d -s "$SESSION_NAME" \
-    "bash -lc 'cd \"$SRC_DIR\" && export PYTHONPATH=\"$SRC_DIR\":\$PYTHONPATH && python3 -m uvicorn langchain_agent.backend.main:app --host 0.0.0.0 --port \"$PORT\"'"
+    "bash -lc 'cd \"$SRC_DIR\" && export PYTHONPATH=\"$SRC_DIR\":\$PYTHONPATH && export OTEL_EXPORTER_OTLP_ENDPOINT=\"${OTEL_EXPORTER_OTLP_ENDPOINT}\" OTEL_SERVICE_NAME=\"${OTEL_SERVICE_NAME}\" && python3 -m uvicorn langchain_agent.backend.main:app --host 0.0.0.0 --port \"$PORT\"'"
 
 echo "✓ LangChain 后端已在 tmux session 中启动: $SESSION_NAME"
 echo "  attach: tmux attach -t $SESSION_NAME"

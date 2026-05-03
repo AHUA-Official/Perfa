@@ -42,27 +42,37 @@ fi
 echo ""
 
 echo "[2/3] 启动 Grafana..."
-if $SUDO docker ps 2>/dev/null | grep -q grafana; then
-    echo "      Grafana 已在运行"
+cd "$(dirname "$GRAFANA_COMPOSE_FILE")"
+if $SUDO docker compose -f "$GRAFANA_COMPOSE_FILE" version &>/dev/null; then
+    if $SUDO docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx grafana; then
+        current_project="$($SUDO docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' grafana 2>/dev/null || true)"
+        current_config="$($SUDO docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' grafana 2>/dev/null || true)"
+        if [ -z "$current_project" ] || [ "$current_config" != "$GRAFANA_COMPOSE_FILE" ]; then
+            echo "      发现非当前 compose 管理的 grafana 容器，先移除后重建"
+            $SUDO docker rm -f grafana >/dev/null 2>&1 || true
+        fi
+    fi
+    $SUDO docker compose -f "$GRAFANA_COMPOSE_FILE" up -d --force-recreate
+elif $SUDO docker-compose -f "$GRAFANA_COMPOSE_FILE" version &>/dev/null; then
+    if $SUDO docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx grafana; then
+        current_project="$($SUDO docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' grafana 2>/dev/null || true)"
+        current_config="$($SUDO docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' grafana 2>/dev/null || true)"
+        if [ -z "$current_project" ] || [ "$current_config" != "$GRAFANA_COMPOSE_FILE" ]; then
+            echo "      发现非当前 compose 管理的 grafana 容器，先移除后重建"
+            $SUDO docker rm -f grafana >/dev/null 2>&1 || true
+        fi
+    fi
+    $SUDO docker-compose -f "$GRAFANA_COMPOSE_FILE" up -d --force-recreate
 else
-    cd "$(dirname "$GRAFANA_COMPOSE_FILE")"
-    if $SUDO docker compose -f "$GRAFANA_COMPOSE_FILE" version &>/dev/null; then
-        $SUDO docker compose -f "$GRAFANA_COMPOSE_FILE" down 2>/dev/null || true
-        $SUDO docker compose -f "$GRAFANA_COMPOSE_FILE" up -d
-    elif $SUDO docker-compose -f "$GRAFANA_COMPOSE_FILE" version &>/dev/null; then
-        $SUDO docker-compose -f "$GRAFANA_COMPOSE_FILE" down 2>/dev/null || true
-        $SUDO docker-compose -f "$GRAFANA_COMPOSE_FILE" up -d
-    else
-        echo "      ❌ Docker Compose 未安装"
-        exit 1
-    fi
-    sleep 3
-    if $SUDO docker ps 2>/dev/null | grep -q grafana; then
-        echo "      ✅ Grafana 启动成功 (端口 3000)"
-    else
-        echo "      ❌ Grafana 启动失败"
-        exit 1
-    fi
+    echo "      ❌ Docker Compose 未安装"
+    exit 1
+fi
+sleep 3
+if $SUDO docker ps 2>/dev/null | grep -q grafana; then
+    echo "      ✅ Grafana 已按 compose 配置运行 (端口 3000)"
+else
+    echo "      ❌ Grafana 启动失败"
+    exit 1
 fi
 echo ""
 
@@ -81,11 +91,11 @@ echo "      ✅ 数据源已配置"
 echo ""
 
 echo "[配置] 导入 Grafana Dashboard..."
-DS_UID=$(curl -s http://localhost:3000/api/datasources -u admin:admin123 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['uid'] if d else '')" 2>/dev/null)
+DS_UID=$(curl -s http://localhost:3000/api/datasources -u admin:admin123 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['uid'] if d else '')" 2>/dev/null || true)
 
 if [ -n "$DS_UID" ]; then
     DASHBOARD_FILE="$GRAFANA_ASSETS_DIR/dashboards/node-agent.json"
-    python3 -c "
+    if python3 -c "
 import json
 with open('$DASHBOARD_FILE') as f:
     d = json.load(f)
@@ -102,8 +112,11 @@ print(json.dumps(payload))
 " | curl -s -X POST http://localhost:3000/api/dashboards/db \
     -H "Content-Type: application/json" \
     -u admin:admin123 \
-    -d @- >/dev/null 2>&1
-    echo "      ✅ Dashboard 已导入"
+    -d @- >/dev/null 2>&1; then
+        echo "      ✅ Dashboard 已导入"
+    else
+        echo "      ⚠️  Dashboard 导入失败，请手动导入"
+    fi
 else
     echo "      ⚠️  Dashboard 导入失败，请手动导入"
 fi

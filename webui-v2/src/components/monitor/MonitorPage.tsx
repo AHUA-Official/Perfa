@@ -20,6 +20,8 @@ import {
 
 const { Text, Title } = Typography;
 const MONITOR_ROOT = '/api/monitor';
+const GRAFANA_ROOT = '/monitor/grafana';
+const VICTORIA_ROOT = '/monitor/vm/';
 
 /** 所有服务统一配置 — 有代理走代理，没有的只显示端口信息 */
 const ALL_SERVICES = [
@@ -29,8 +31,8 @@ const ALL_SERVICES = [
   { name: 'WebUI V2', category: '核心服务', icon: <DashboardOutlined />, proxyUrl: null, port: 3002, desc: '前端界面（Next.js）', color: '#34A853' },
   { name: 'OTel Collector', category: '可观测性', icon: <EyeOutlined />, proxyUrl: null, port: 4317, desc: 'OpenTelemetry 数据采集', color: '#FF6D00' },
   { name: 'Jaeger UI', category: '可观测性', icon: <SearchOutlined />, proxyUrl: `${MONITOR_ROOT}/jaeger`, port: 16686, desc: '分布式链路追踪', color: '#66BCFF' },
-  { name: 'Grafana', category: '可观测性', icon: <DashboardOutlined />, proxyUrl: `${MONITOR_ROOT}/grafana`, port: 3000, desc: '监控看板', color: '#F46800' },
-  { name: 'VictoriaMetrics', category: '可观测性', icon: <DatabaseOutlined />, proxyUrl: `${MONITOR_ROOT}/vm`, port: 8428, desc: '时序数据库', color: '#6C3FC5' },
+  { name: 'Grafana', category: '可观测性', icon: <DashboardOutlined />, proxyUrl: GRAFANA_ROOT, port: 3000, desc: '监控看板', color: '#F46800' },
+  { name: 'VictoriaMetrics', category: '可观测性', icon: <DatabaseOutlined />, proxyUrl: VICTORIA_ROOT, port: 8428, desc: '时序数据库', color: '#6C3FC5' },
 ];
 
 interface TraceSpan {
@@ -441,7 +443,7 @@ export default function MonitorPage() {
         <EmbeddedConsole
           title="Grafana 性能监控看板"
           description="在工作台里直接查看 dashboard、节点趋势、运行指标和告警上下文。"
-          src={`${MONITOR_ROOT}/grafana`}
+          src={GRAFANA_ROOT}
         />
       ),
     },
@@ -457,7 +459,7 @@ export default function MonitorPage() {
         <EmbeddedConsole
           title="VictoriaMetrics 指标查询"
           description="直接在嵌入面板里做指标查询、验证抓取结果和对比时间序列。"
-          src={`${MONITOR_ROOT}/vm/vmui`}
+          src={VICTORIA_ROOT}
         />
       ),
     },
