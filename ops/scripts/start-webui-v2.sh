@@ -38,6 +38,8 @@ mkdir -p "$LOG_DIR"
 
 cd "$WEBUI_DIR"
 
+rm -rf "$WEBUI_DIR/.next"
+
 if [ "$MODE" = "--foreground" ]; then
     exec npm run dev
 fi
