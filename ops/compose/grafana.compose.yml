@@ -11,7 +11,12 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin123
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SECURITY_ALLOW_EMBEDDING=true
-      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/monitor/grafana/
+      - GF_SECURITY_COOKIE_SAMESITE=lax
+      - GF_SECURITY_COOKIE_SECURE=false
+      - GF_SECURITY_CSRF_TRUSTED_ORIGINS=${PERFA_GRAFANA_TRUSTED_ORIGINS:-http://118.25.19.83:3002,http://127.0.0.1:3002,http://localhost:3002}
+      - GF_SECURITY_CSRF_ADDITIONAL_HEADERS=X-Forwarded-Host,X-Forwarded-Proto
+      - GF_SERVER_DOMAIN=${PERFA_GRAFANA_DOMAIN:-118.25.19.83}
+      - GF_SERVER_ROOT_URL=${PERFA_GRAFANA_ROOT_URL:-http://118.25.19.83:3002/monitor/grafana/}
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - grafana-storage:/var/lib/grafana
