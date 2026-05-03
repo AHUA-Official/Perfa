@@ -1,0 +1,73 @@
+<mxfile host="app.diagrams.net" modified="2026-05-03T00:00:00.000Z" agent="Codex" version="24.7.5" type="device">
+  <diagram id="fig_4_2" name="Page-1">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="图 4-2 Benchmark 任务生命周期图" style="text;html=1;strokeColor=none;fillColor=none;fontSize=22;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="610" y="20" width="680" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="req" value="提交 Benchmark 请求&#xa;test_name + params" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="50" y="180" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="validate" value="校验请求&#xa;Runner 是否注册&#xa;检查单任务锁" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="280" y="180" width="190" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="busy" value="已有任务运行？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="520" y="170" width="130" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="reject" value="拒绝请求&#xa;TaskRunningError&#xa;返回 current_task" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="500" y="350" width="170" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="create" value="创建 BenchmarkTask&#xa;分配 task_id&#xa;写入 _tasks / _current_task" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="710" y="180" width="210" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="prepare" value="PREPARING&#xa;检查工具状态&#xa;Runner.prepare" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="980" y="180" width="190" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="setup" value="创建工作目录与日志&#xa;cleanup_before&#xa;build_command" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="180" width="210" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="running" value="RUNNING&#xa;subprocess.Popen&#xa;持续读取输出与写日志" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1500" y="180" width="230" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="collecting" value="COLLECTING&#xa;Runner.collect_result&#xa;ResultCollector.collect" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1500" y="390" width="230" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="cleaning" value="CLEANING&#xa;cleanup_after&#xa;保留日志" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="390" width="210" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="done" value="COMPLETED / FAILED&#xa;释放 _current_task&#xa;返回状态与结果" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="970" y="390" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="timeout" value="异常路径&#xa;超时 / 工具缺失 / 退出码非 0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1500" y="610" width="230" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="cancel" value="取消 / 暂停 / 恢复&#xa;cancel_task / pause_task / resume_task" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="610" width="210" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="storage" value="结果持久化&#xa;benchmark_results.db&#xa;日志文件 / task_id 查询" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="970" y="610" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="lock" value="单节点串行约束&#xa;RLock 保护 current_task&#xa;避免并发压测互相干扰" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="280" y="610" width="260" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="req" target="validate"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="validate" target="busy"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="是" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="busy" target="reject"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="否" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="busy" target="create"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="create" target="prepare"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="prepare" target="setup"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="setup" target="running"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="退出码 0" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="running" target="collecting"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="collecting" target="cleaning"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="cleaning" target="done"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" value="保存" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="done" target="storage"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e12" value="异常/超时" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="running" target="timeout"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e13" value="标记失败并保存" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="timeout" target="storage"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e14" value="用户控制" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="cancel" target="running"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e15" value="保护" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="lock" target="validate"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

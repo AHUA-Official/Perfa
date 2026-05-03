@@ -1,0 +1,14 @@
+flowchart TD
+    A[Benchmark 结果] --> D[generate_report 节点]
+    B[错误记录] --> D
+    C[工具调用记录] --> D
+    D --> E{MCP 报告工具可用}
+    E -->|可用| F[GenerateReportTool<br/>结构化报告]
+    E -->|不可用| G[LLM 辅助生成<br/>Markdown 报告]
+    F --> H[AgentOrchestrator<br/>整理报告对象]
+    G --> H
+    H --> I[ReportStore<br/>reports.json]
+    I --> J[ReportsPage]
+    J --> K[AI 结论]
+    J --> L[原始结果 raw_results]
+    J --> M[任务 ID / 错误 / tool_calls]

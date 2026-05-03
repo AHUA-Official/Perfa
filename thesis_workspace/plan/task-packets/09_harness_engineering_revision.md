@@ -1,0 +1,10 @@
+## Task Packet
+
+- Scope: 将外部 AI harness / coding-agent 编排工程资料转化为 Perfa 的项目规则和论文论述，突出 Perfa 作为服务器性能测试垂直 Agent Harness 的生命周期、证据清单和可观测反馈。
+- Files to read: `thesis_workspace/plan/project-overview.md`, `thesis_workspace/plan/outline.md`, `thesis_workspace/chapters/02_related_technology_and_requirements.md`, `thesis_workspace/chapters/03_system_design.md`, `thesis_workspace/chapters/04_detailed_design_and_implementation.md`, `thesis_workspace/chapters/05_testing_and_results.md`, `thesis_workspace/chapters/06_conclusion.md`, `src/langchain_agent/workflows/nodes.py`, `src/langchain_agent/core/orchestrator.py`, `src/mcp_server/server.py`, `webui-v2/src/components/reports/ReportsPage.tsx`
+- Files allowed to edit: `AGENTS.md`, `thesis_workspace/chapters/*.md`, `thesis_workspace/refs/*.md`, `thesis_workspace/plan/progress.md`, `thesis_workspace/plan/task-packets/09_harness_engineering_revision.md`
+- Required skills: using-research-writing, paper-orchestration, writing-chapters, evidence-driven-writing, literature-review
+- Evidence/data inputs: 用户给出的 Symphony、walkinglabs harness、Anthropic long-running agents、OpenAI harness engineering、Codex best practices 链接；Perfa 当前 MCP Tool、Workflow、ReportStore、knowledge_matches 和可观测性实现。
+- Required artifacts: 项目级 Agent Harness 规则文档；论文正文中关于 Perfa 垂直性能测试 Harness 的论述；参考文献/资料列表补充；progress capability-use audit。
+- Rejection checks: 不得把 Perfa 写成通用 coding-agent 编排平台；不得声称已实现 Symphony 式 issue daemon 或完整向量化 RAG；不得把外部博客原文大段粘贴到论文；必须明确哪些是已实现，哪些是设计借鉴。
+- Validation commands: `rg -n "Harness|生命周期|证据清单|AGENTS|task_id|knowledge_matches" AGENTS.md thesis_workspace/chapters thesis_workspace/refs`; `rg -n "Symphony|Anthropic|Codex|walkinglabs|harness" thesis_workspace/refs thesis_workspace/chapters`; `wc -m thesis_workspace/chapters/02_related_technology_and_requirements.md thesis_workspace/chapters/03_system_design.md thesis_workspace/chapters/04_detailed_design_and_implementation.md thesis_workspace/chapters/05_testing_and_results.md thesis_workspace/chapters/06_conclusion.md`

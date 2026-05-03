@@ -10,6 +10,8 @@ Perfa - LangChain Agent Module
 # 标准库导入
 import asyncio
 import time as _time
+import uuid
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 # 第三方库导入
@@ -24,6 +26,7 @@ from langchain_agent.agents import ReActAgent
 from langchain_agent.core.memory import ConversationMemory
 from langchain_agent.core.error_handler import ErrorHandler
 from langchain_agent.core.config import LLMConfig, MCPConfig, AgentConfig
+from langchain_agent.backend.report_store import ReportStore
 
 # OTel 可观测性
 _otel_initialized = False
@@ -78,6 +81,7 @@ class AgentOrchestrator:
         
         # 初始化组件
         self.memory = ConversationMemory(max_turns=memory_max_turns, max_age_hours=memory_max_age_hours)
+        self.report_store = ReportStore()
         self.error_handler = ErrorHandler(
             max_retries=self.agent_config.error_max_retries,
             retry_delay=self.agent_config.error_retry_delay
@@ -100,6 +104,107 @@ class AgentOrchestrator:
         
         logger.info(f"Agent编排器初始化完成，使用智谱AI GLM-5")
         logger.info(f"可用工具数: {len(self.tools)}")
+
+    @staticmethod
+    def _scenario_label(scenario_name: str) -> str:
+        labels = {
+            "quick_test": "快速测试",
+            "full_assessment": "全面评估",
+            "cpu_focus": "CPU 专项",
+            "storage_focus": "存储专项",
+            "network_focus": "网络专项",
+        }
+        return labels.get(scenario_name, scenario_name)
+
+    @staticmethod
+    def _safe_detach_token(token) -> None:
+        if not token:
+            return
+        try:
+            from opentelemetry import context as otel_ctx
+            otel_ctx.detach(token)
+        except ValueError as e:
+            logger.debug(f"忽略跨上下文 detach 异常: {e}")
+        except Exception as e:
+            logger.debug(f"detach token 异常: {e}")
+
+    async def _resolve_server_metadata(self, server_id: Optional[str]) -> Dict[str, Any]:
+        if not server_id:
+            return {}
+
+        list_servers_tool = self.tools_dict.get("list_servers")
+        if not list_servers_tool:
+            return {}
+
+        try:
+            result = await list_servers_tool.ainvoke({}) if hasattr(list_servers_tool, "ainvoke") else list_servers_tool.run({})
+            if isinstance(result, str):
+                import json
+                result = json.loads(result)
+            servers = result if isinstance(result, list) else result.get("servers", [])
+            for server in servers:
+                if isinstance(server, dict) and server.get("server_id") == server_id:
+                    return server
+        except Exception as e:
+            logger.debug(f"解析服务器元数据失败: {e}")
+        return {}
+
+    @staticmethod
+    def _extract_summary(text: str) -> str:
+        normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+        if not normalized:
+            return "暂无摘要"
+        normalized = normalized.replace("#", "").strip()
+        return normalized[:180] + ("..." if len(normalized) > 180 else "")
+
+    async def _persist_workflow_report(
+        self,
+        *,
+        query: str,
+        result: Dict[str, Any],
+        session_id: str,
+        conversation_id: str,
+        trace_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        if result.get("mode") != "workflow":
+            return None
+
+        scenario = result.get("scenario") or "workflow"
+        server_id = result.get("server_id")
+        server_meta = await self._resolve_server_metadata(server_id)
+        server_alias = server_meta.get("alias") if isinstance(server_meta, dict) else None
+        server_ip = result.get("server_ip") or (server_meta.get("ip") if isinstance(server_meta, dict) else None)
+        ai_report = result.get("result", "") or "未生成报告"
+        report = {
+            "id": f"report_{uuid.uuid4().hex}",
+            "type": scenario,
+            "title": f"{self._scenario_label(scenario)} · {server_alias or server_ip or server_id or '未命名服务器'}",
+            "scenario": scenario,
+            "scenario_label": self._scenario_label(scenario),
+            "server_id": server_id or "",
+            "server_alias": server_alias,
+            "server_ip": server_ip,
+            "created_at": datetime.now().isoformat(),
+            "status": "completed" if result.get("success") else "failed",
+            "summary": self._extract_summary(ai_report),
+            "ai_report": ai_report,
+            "content": ai_report,
+            "raw_results": result.get("results", {}),
+            "raw_errors": result.get("errors", []),
+            "knowledge_matches": result.get("knowledge_matches", []),
+            "task_ids": result.get("task_ids", {}),
+            "tool_calls": result.get("tool_calls", []),
+            "trace_id": trace_id,
+            "query": query,
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+            "source": "workflow",
+            "test_count": len(result.get("results", {})),
+            "charts": [],
+        }
+        self.report_store.save_report(report)
+        result["report_id"] = report["id"]
+        return report
     
     def _init_workflow_engine(self):
         """初始化 LangGraph 工作流引擎"""
@@ -145,7 +250,8 @@ class AgentOrchestrator:
         query: str,
         session_id: Optional[str] = None,
         mode: str = "auto",
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        server_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         处理用户查询
@@ -173,6 +279,8 @@ class AgentOrchestrator:
         
         logger.info(f"开始处理查询，会话ID: {session_id}，模式: {mode}")
         logger.info(f"用户查询: {query}")
+        if server_id:
+            logger.info(f"绑定目标服务器: {server_id}")
         
         # 记录用户消息到记忆
         self.memory.add_message(session_id, "user", query)
@@ -204,6 +312,8 @@ class AgentOrchestrator:
             pass
         
         session_metric_attrs = {"session_id": session_id, "conversation_id": conversation_id}
+        if server_id:
+            session_metric_attrs["server_id"] = server_id
 
         # 活跃会话 +1
         try:
@@ -247,7 +357,7 @@ class AgentOrchestrator:
                                 "scenario_display": scenario.display_name,
                                 "reason": "scenario_matched",
                             })
-                        result = await self._run_workflow(scenario.name, query, session_id)
+                    result = await self._run_workflow(scenario.name, query, session_id, server_id=server_id)
                 elif mode == "workflow" and self.workflow_engine:
                     # 强制走工作流，默认使用 full_assessment
                     scenario = await self.workflow_engine.route(query)
@@ -262,7 +372,7 @@ class AgentOrchestrator:
                             "original_scenario": scenario.name,
                             "reason": "user_forced_workflow",
                         })
-                    result = await self._run_workflow(scenario_name, query, session_id)
+                    result = await self._run_workflow(scenario_name, query, session_id, server_id=server_id)
                 else:
                     # 降级到 ReAct
                     if _span:
@@ -290,15 +400,21 @@ class AgentOrchestrator:
             
             logger.info(f"查询处理完成，耗时: {result.get('execution_time', 0):.2f}秒")
             
+            await self._persist_workflow_report(
+                query=query,
+                result=result,
+                session_id=session_id,
+                conversation_id=conversation_id,
+                trace_id=_trace_id,
+            )
+
             # OTel: 结束 span
-            if _span:
+            if _span and _span.is_recording():
                 _span.set_attribute("is_success", result.get("is_success", False))
                 _span.set_attribute("execution_time", result.get("execution_time", 0))
                 _span.set_attribute("mode_used", result.get("mode", mode))
                 _span.end()
-            if _token:
-                from opentelemetry import context as otel_ctx
-                otel_ctx.detach(_token)
+            self._safe_detach_token(_token)
             
             # 活跃会话 -1
             try:
@@ -312,7 +428,7 @@ class AgentOrchestrator:
             # 附加 trace_id 到结果
             if _trace_id:
                 result["trace_id"] = _trace_id
-                result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+                result["jaeger_url"] = f"/api/monitor/jaeger/trace/{_trace_id}"
             result["conversation_id"] = conversation_id
             
             return result
@@ -322,13 +438,11 @@ class AgentOrchestrator:
             logger.error(error_msg)
             
             # OTel: 记录异常
-            if _span:
+            if _span and _span.is_recording():
                 _span.record_exception(e)
                 _span.set_attribute("is_success", False)
                 _span.end()
-            if _token:
-                from opentelemetry import context as otel_ctx
-                otel_ctx.detach(_token)
+            self._safe_detach_token(_token)
             
             # 活跃会话 -1
             try:
@@ -348,7 +462,7 @@ class AgentOrchestrator:
                 "execution_time": 0,
                 "is_success": False,
                 "trace_id": _trace_id,
-                "jaeger_url": f"/api/jaeger/trace/{_trace_id}" if _trace_id else None,
+                "jaeger_url": f"/api/monitor/jaeger/trace/{_trace_id}" if _trace_id else None,
             }
     
     async def _run_react(self, query: str, session_id: str) -> Dict[str, Any]:
@@ -388,7 +502,8 @@ class AgentOrchestrator:
         query: str,
         session_id: Optional[str] = None,
         mode: str = "auto",
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        server_id: Optional[str] = None
     ):
         """
         流式处理用户查询 — 双通道事件流
@@ -416,6 +531,8 @@ class AgentOrchestrator:
             conversation_id = session_id
         
         logger.info(f"[Stream] 开始流式处理查询，会话ID: {session_id}，模式: {mode}")
+        if server_id:
+            logger.info(f"[Stream] 绑定目标服务器: {server_id}")
         
         # 记录用户消息到记忆
         self.memory.add_message(session_id, "user", query)
@@ -425,6 +542,8 @@ class AgentOrchestrator:
         _token = None
         _trace_id = None
         session_metric_attrs = {"session_id": session_id, "conversation_id": conversation_id}
+        if server_id:
+            session_metric_attrs["server_id"] = server_id
         try:
             from langchain_agent.observability.tracer import get_tracer
             _tracer = get_tracer()
@@ -477,7 +596,7 @@ class AgentOrchestrator:
                     "scenario": scenario.display_name or scenario.name,
                 }
                 
-                result = await self._run_workflow(scenario.name, query, session_id)
+                result = await self._run_workflow(scenario.name, query, session_id, server_id=server_id)
                 
                 # 工作流节点进度
                 node_statuses = result.get("node_statuses", {})
@@ -492,7 +611,7 @@ class AgentOrchestrator:
                 # 推送最终结果
                 if _trace_id:
                     result["trace_id"] = _trace_id
-                    result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+                    result["jaeger_url"] = f"/api/monitor/jaeger/trace/{_trace_id}"
                 result["conversation_id"] = conversation_id
 
                 # 记录到记忆，保证流式工作流和同步路径一致
@@ -517,6 +636,13 @@ class AgentOrchestrator:
                         yield chunk
                     yield {"type": "answer_done"}
                 
+                await self._persist_workflow_report(
+                    query=query,
+                    result=result,
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    trace_id=_trace_id,
+                )
                 yield {"type": "done", "result": result}
             else:
                 # ---- ReAct 模式（逐步推送） ----
@@ -633,7 +759,7 @@ class AgentOrchestrator:
                 
                 if _trace_id:
                     result["trace_id"] = _trace_id
-                    result["jaeger_url"] = f"/api/jaeger/trace/{_trace_id}"
+                    result["jaeger_url"] = f"/api/monitor/jaeger/trace/{_trace_id}"
                 result["conversation_id"] = conversation_id
                 
                 # 流式推送答案正文
@@ -644,10 +770,14 @@ class AgentOrchestrator:
                     yield {"type": "answer_done"}
                 
                 yield {"type": "done", "result": result}
+
+        except (GeneratorExit, asyncio.CancelledError):
+            logger.info("[Stream] 客户端提前断开，结束流式上下文")
+            raise
         
         except Exception as e:
             logger.error(f"[Stream] 流式处理异常: {str(e)}")
-            if _span:
+            if _span and _span.is_recording():
                 _span.record_exception(e)
             yield {
                 "type": "done",
@@ -662,15 +792,13 @@ class AgentOrchestrator:
                     "is_success": False,
                     "mode": mode,
                     "trace_id": _trace_id,
-                    "jaeger_url": f"/api/jaeger/trace/{_trace_id}" if _trace_id else None,
+                    "jaeger_url": f"/api/monitor/jaeger/trace/{_trace_id}" if _trace_id else None,
                 }
             }
         finally:
-            if _span:
+            if _span and _span.is_recording():
                 _span.end()
-            if _token:
-                from opentelemetry import context as otel_ctx
-                otel_ctx.detach(_token)
+            self._safe_detach_token(_token)
             try:
                 from langchain_agent.observability.metrics import get_metric
                 session_metric = get_metric("session_active")
@@ -697,11 +825,11 @@ class AgentOrchestrator:
         if buffer:
             yield {"type": "answer_delta", "content": buffer}
     
-    async def _run_workflow(self, scenario_name: str, query: str, session_id: str) -> Dict[str, Any]:
+    async def _run_workflow(self, scenario_name: str, query: str, session_id: str, server_id: Optional[str] = None) -> Dict[str, Any]:
         """使用 LangGraph 工作流执行查询"""
         logger.info(f"使用工作流执行查询，场景: {scenario_name}")
         
-        result = await self.workflow_engine.run(scenario_name, query, session_id)
+        result = await self.workflow_engine.run(scenario_name, query, session_id, server_id=server_id)
         
         # 补充工作流元信息
         result["mode"] = "workflow"

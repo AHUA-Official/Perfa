@@ -19,17 +19,18 @@ import {
 } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
+const MONITOR_ROOT = '/api/monitor';
 
 /** 所有服务统一配置 — 有代理走代理，没有的只显示端口信息 */
 const ALL_SERVICES = [
-  { name: 'Perfa Agent API', category: '核心服务', icon: <RobotOutlined />, proxyUrl: '/api/v1/models', port: 10000, desc: 'LangChain Agent + OpenAI 兼容 API', color: '#00D9A6' },
+  { name: 'Perfa Agent API', category: '核心服务', icon: <RobotOutlined />, proxyUrl: `/api/v1/models`, port: 10000, desc: 'LangChain Agent + OpenAI 兼容 API', color: '#00D9A6' },
   { name: 'MCP Server', category: '核心服务', icon: <ApiOutlined />, proxyUrl: null, port: 9000, desc: 'MCP 工具服务（SSE + SSH 管理）', color: '#4285F4' },
   { name: 'Node Agent', category: '核心服务', icon: <CloudServerOutlined />, proxyUrl: null, port: 8080, desc: '节点 Agent（压测执行）', color: '#FBBC04' },
   { name: 'WebUI V2', category: '核心服务', icon: <DashboardOutlined />, proxyUrl: null, port: 3002, desc: '前端界面（Next.js）', color: '#34A853' },
   { name: 'OTel Collector', category: '可观测性', icon: <EyeOutlined />, proxyUrl: null, port: 4317, desc: 'OpenTelemetry 数据采集', color: '#FF6D00' },
-  { name: 'Jaeger UI', category: '可观测性', icon: <SearchOutlined />, proxyUrl: '/api/jaeger', port: 16686, desc: '分布式链路追踪', color: '#66BCFF' },
-  { name: 'Grafana', category: '可观测性', icon: <DashboardOutlined />, proxyUrl: '/api/grafana', port: 3000, desc: '监控看板', color: '#F46800' },
-  { name: 'VictoriaMetrics', category: '可观测性', icon: <DatabaseOutlined />, proxyUrl: '/api/vm', port: 8428, desc: '时序数据库', color: '#6C3FC5' },
+  { name: 'Jaeger UI', category: '可观测性', icon: <SearchOutlined />, proxyUrl: `${MONITOR_ROOT}/jaeger`, port: 16686, desc: '分布式链路追踪', color: '#66BCFF' },
+  { name: 'Grafana', category: '可观测性', icon: <DashboardOutlined />, proxyUrl: `${MONITOR_ROOT}/grafana`, port: 3000, desc: '监控看板', color: '#F46800' },
+  { name: 'VictoriaMetrics', category: '可观测性', icon: <DatabaseOutlined />, proxyUrl: `${MONITOR_ROOT}/vm`, port: 8428, desc: '时序数据库', color: '#6C3FC5' },
 ];
 
 interface TraceSpan {
@@ -140,13 +141,13 @@ export default function MonitorPage() {
       });
       if (query) {
         if (/^[a-f0-9]{16,32}$/i.test(query.trim())) {
-          window.open(`/api/jaeger/trace/${query.trim()}`, '_blank');
+          window.open(`${MONITOR_ROOT}/jaeger/trace/${query.trim()}`, '_blank');
           setTraceSearchLoading(false);
           return;
         }
       }
 
-      const res = await fetch(`/api/jaeger/api/traces?${params}`);
+      const res = await fetch(`${MONITOR_ROOT}/jaeger/api/traces?${params}`);
       if (!res.ok) throw new Error(`Jaeger API 返回 ${res.status}`);
       const data = await res.json();
 
@@ -210,9 +211,6 @@ export default function MonitorPage() {
     if (svc.proxyUrl) {
       window.open(svc.proxyUrl, '_blank');
     }
-    if (svc.name === 'Node Agent') {
-      window.open('http://127.0.0.1:8080/health', '_blank');
-    }
   };
 
   const tabs = [
@@ -243,7 +241,7 @@ export default function MonitorPage() {
                 {ALL_SERVICES.filter(s => s.category === category).map((svc) => {
                   const status = serviceStatus[svc.name];
                   const hasProxy = !!svc.proxyUrl;
-                  const canOpen = hasProxy || svc.name === 'Node Agent';
+                  const canOpen = hasProxy;
                   return (
                     <Card
                       key={svc.name}
@@ -275,12 +273,9 @@ export default function MonitorPage() {
                           />
                           <div className="mt-1 flex items-center gap-1">
                             <Text code className="!text-[10px] !text-primary">:{svc.port}</Text>
-                            {hasProxy && (
-                              <Tag color="cyan" className="!text-[9px] !px-1 !py-0 !m-0 !leading-none">代理</Tag>
-                            )}
-                            {!hasProxy && (
-                              <Tag color="default" className="!text-[9px] !px-1 !py-0 !m-0 !leading-none">本地端口</Tag>
-                            )}
+                            <Tag color={svc.proxyUrl ? 'cyan' : 'default'} className="!text-[9px] !px-1 !py-0 !m-0 !leading-none">
+                              {svc.proxyUrl ? '入口' : '本地端口'}
+                            </Tag>
                           </div>
                         </div>
                       </div>
@@ -305,7 +300,7 @@ export default function MonitorPage() {
         <EmbeddedConsole
           title="Jaeger 分布式链路追踪"
           description="直接在页面内查看 trace、span、工具调用和 AI 推理链路。"
-          src="/api/jaeger"
+          src={`${MONITOR_ROOT}/jaeger`}
         />
       ),
     },
@@ -367,7 +362,7 @@ export default function MonitorPage() {
                         size="small"
                         icon={<LinkOutlined />}
                         className="!text-primary !p-0"
-                        onClick={() => window.open(`/api/jaeger/trace/${trace.trace_id}`, '_blank')}
+                        onClick={() => window.open(`${MONITOR_ROOT}/jaeger/trace/${trace.trace_id}`, '_blank')}
                       >
                         在 Jaeger 中查看
                       </Button>
@@ -446,7 +441,7 @@ export default function MonitorPage() {
         <EmbeddedConsole
           title="Grafana 性能监控看板"
           description="在工作台里直接查看 dashboard、节点趋势、运行指标和告警上下文。"
-          src="/api/grafana"
+          src={`${MONITOR_ROOT}/grafana`}
         />
       ),
     },
@@ -462,7 +457,7 @@ export default function MonitorPage() {
         <EmbeddedConsole
           title="VictoriaMetrics 指标查询"
           description="直接在嵌入面板里做指标查询、验证抓取结果和对比时间序列。"
-          src="/api/vm/vmui"
+          src={`${MONITOR_ROOT}/vm/vmui`}
         />
       ),
     },

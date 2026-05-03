@@ -172,20 +172,44 @@ class Cleaner:
                 
                 # 检查进程名或命令行
                 proc_name = proc.info['name'] or ''
-                cmdline = ' '.join(proc.info['cmdline'] or [])
-                
-                for name in process_names:
-                    if name.lower() in proc_name.lower() or name.lower() in cmdline.lower():
-                        logger.warning(f"Killing residual process: PID={proc.info['pid']}, name={proc_name}")
-                        proc.kill()
-                        killed_count += 1
-                        break
+                cmdline = proc.info['cmdline'] or []
+
+                if self._matches_residual_process(proc_name, cmdline, process_names):
+                    logger.warning(f"Killing residual process: PID={proc.info['pid']}, name={proc_name}")
+                    proc.kill()
+                    killed_count += 1
                         
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
         
         if killed_count > 0:
             logger.info(f"Killed {killed_count} residual processes")
+
+    def _matches_residual_process(self, proc_name: str, cmdline: List[str], process_names: List[str]) -> bool:
+        """
+        判断进程是否是目标测试的残留进程。
+
+        只匹配真实可执行名，避免把请求参数中包含测试名的客户端进程
+        （例如 curl ... '{"test_name":"stream"}'）误杀。
+        """
+        candidates = set()
+
+        if proc_name:
+            candidates.add(proc_name.lower())
+            candidates.add(Path(proc_name).name.lower())
+
+        if cmdline:
+            executable = cmdline[0]
+            if executable:
+                candidates.add(executable.lower())
+                candidates.add(Path(executable).name.lower())
+
+        for name in process_names:
+            lowered = name.lower()
+            if lowered in candidates:
+                return True
+
+        return False
     
     def _check_disk_space(self, path: str) -> bool:
         """检查磁盘空间"""

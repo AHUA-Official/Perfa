@@ -215,7 +215,7 @@ async def stream_chat_response(
             header_data["conversation_id"] = conversation_id
         if trace_id_hex:
             header_data["trace_id"] = trace_id_hex
-            header_data["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+            header_data["jaeger_url"] = f"/api/monitor/jaeger/trace/{trace_id_hex}"
         yield format_sse(header_data)
         
         try:
@@ -322,7 +322,7 @@ async def stream_chat_response(
                     }
                     if trace_id_hex:
                         finish_chunk["trace_id"] = trace_id_hex
-                        finish_chunk["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+                        finish_chunk["jaeger_url"] = f"/api/monitor/jaeger/trace/{trace_id_hex}"
                     if workflow_data:
                         finish_chunk["workflow"] = workflow_data
                     if session_id:
@@ -382,7 +382,7 @@ async def stream_chat_response(
             }
             if trace_id_hex:
                 finish_chunk["trace_id"] = trace_id_hex
-                finish_chunk["jaeger_url"] = f"/api/jaeger/trace/{trace_id_hex}"
+                finish_chunk["jaeger_url"] = f"/api/monitor/jaeger/trace/{trace_id_hex}"
             if workflow_data:
                 finish_chunk["workflow"] = workflow_data
             if session_id:
@@ -861,6 +861,29 @@ async def list_reports():
     """获取测试报告列表"""
     try:
         orchestrator = await get_orchestrator()
+        persisted_reports = orchestrator.report_store.list_reports(limit=100)
+        if persisted_reports:
+            return ReportListResponse(
+                reports=[
+                    ReportInfo(
+                        id=item.get("id", ""),
+                        type=item.get("type", "workflow"),
+                        title=item.get("title"),
+                        scenario=item.get("scenario"),
+                        scenario_label=item.get("scenario_label"),
+                        server_id=item.get("server_id", ""),
+                        server_alias=item.get("server_alias"),
+                        server_ip=item.get("server_ip"),
+                        created_at=item.get("created_at", ""),
+                        status=item.get("status", "completed"),
+                        summary=item.get("summary"),
+                        source=item.get("source", "workflow"),
+                        test_count=item.get("test_count", 0),
+                    )
+                    for item in persisted_reports
+                ]
+            )
+
         tools_dict = orchestrator.tools_dict
         list_servers_tool = tools_dict.get("list_servers")
         list_reports_tool = tools_dict.get("list_benchmark_history")
@@ -901,11 +924,18 @@ async def list_reports():
                 if isinstance(r, dict):
                     reports.append(ReportInfo(
                         id=r.get("task_id", r.get("id", "")),
-                        type=r.get("type", r.get("benchmark_type", "unknown")),
+                        type=r.get("test_name", r.get("type", r.get("benchmark_type", "legacy"))),
+                        title=f"{r.get('test_name', 'legacy')} · {server.get('alias') or server.get('ip') or server_id}",
+                        scenario="legacy_benchmark",
+                        scenario_label="历史单项测试",
                         server_id=r.get("server_id", server_id),
+                        server_alias=server.get("alias"),
+                        server_ip=server.get("ip"),
                         created_at=r.get("created_at", r.get("start_time", "")),
                         status=r.get("status", "completed"),
                         summary=r.get("summary"),
+                        source="legacy",
+                        test_count=1,
                     ))
 
         reports.sort(key=lambda report: report.created_at or "", reverse=True)
@@ -920,6 +950,33 @@ async def get_report(report_id: str):
     """获取报告详情"""
     try:
         orchestrator = await get_orchestrator()
+        persisted = orchestrator.report_store.get_report(report_id)
+        if persisted:
+            return ReportDetail(
+                id=persisted.get("id", report_id),
+                type=persisted.get("type", "workflow"),
+                title=persisted.get("title"),
+                scenario=persisted.get("scenario"),
+                scenario_label=persisted.get("scenario_label"),
+                server_id=persisted.get("server_id", ""),
+                server_alias=persisted.get("server_alias"),
+                server_ip=persisted.get("server_ip"),
+                created_at=persisted.get("created_at", ""),
+                status=persisted.get("status", "completed"),
+                summary=persisted.get("summary"),
+                ai_report=persisted.get("ai_report"),
+                content=persisted.get("content"),
+                raw_results=persisted.get("raw_results"),
+                raw_errors=persisted.get("raw_errors"),
+                knowledge_matches=persisted.get("knowledge_matches"),
+                task_ids=persisted.get("task_ids"),
+                tool_calls=persisted.get("tool_calls"),
+                trace_id=persisted.get("trace_id"),
+                query=persisted.get("query"),
+                source=persisted.get("source", "workflow"),
+                charts=persisted.get("charts"),
+            )
+
         tools_dict = orchestrator.tools_dict
         list_servers_tool = tools_dict.get("list_servers")
         get_result_tool = tools_dict.get("get_benchmark_result")
@@ -955,12 +1012,26 @@ async def get_report(report_id: str):
                 ):
                     return ReportDetail(
                         id=report_id,
-                        type=result.get("type", result.get("benchmark_type", "unknown")),
+                        type=result.get("test_name", result.get("type", result.get("benchmark_type", "legacy"))),
+                        title=f"{result.get('test_name', 'legacy')} · {server.get('alias') or server.get('ip') or server_id}",
+                        scenario="legacy_benchmark",
+                        scenario_label="历史单项测试",
                         server_id=result.get("server_id", server_id),
+                        server_alias=server.get("alias"),
+                        server_ip=server.get("ip"),
                         created_at=result.get("created_at", result.get("start_time", "")),
                         status=result.get("status", "completed"),
                         summary=result.get("summary"),
+                        ai_report=None,
                         content=result.get("result", result.get("metrics")),
+                        raw_results={"legacy_result": result},
+                        raw_errors=[],
+                        knowledge_matches=[],
+                        task_ids={"legacy": report_id},
+                        tool_calls=[],
+                        trace_id=None,
+                        query=None,
+                        source="legacy",
                         charts=result.get("charts"),
                     )
 

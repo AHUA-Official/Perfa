@@ -14,6 +14,7 @@ sys.path.insert(0, str(MCP_DIR))
 from mcp_server.storage.database import Database
 from mcp_server.storage.models import Server
 from mcp_server.tools.benchmark_tools import RunBenchmarkTool
+from mcp_server.tools.knowledge_tools import BenchmarkKnowledgeSearchTool
 from mcp_server.tools.tool_tools import InstallToolTool, ListToolsTool
 
 
@@ -97,6 +98,18 @@ class MCPToolTests(unittest.TestCase):
         self.assertIn("sysbench", tool_enum)
         self.assertIn("iperf3", tool_enum)
         self.assertIn("network", categories)
+
+    def test_benchmark_knowledge_search_returns_local_markdown_matches(self):
+        tool = BenchmarkKnowledgeSearchTool(
+            knowledge_root=str(PROJECT_ROOT / "benchmarkknowledge" / "FurinaBench-main")
+        )
+
+        result = tool.execute(query="fio 随机读写 延迟", test_name="fio", category="storage", limit=3)
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["matches"])
+        self.assertTrue(any("fio" in match["path"].lower() for match in result["matches"]))
+        self.assertIn("knowledge_root", result)
 
 
 if __name__ == "__main__":

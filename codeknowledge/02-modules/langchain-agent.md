@@ -97,4 +97,4 @@ src/langchain_agent/
 ## 文档可信度判断
 
 - 这个模块当前应直接以 `backend/`、`core/`、`workflows/`、`observability/` 的实现为准。
-- 启动入口已经统一迁移到 `ops/scripts/start-langchain-backend.sh` 和 `ops/scripts/start-local.sh`。
+- 启动入口已经统一迁移到 `ops/scripts/start-langchain-backend.sh` 和 `ops/scripts/start-all.sh`。

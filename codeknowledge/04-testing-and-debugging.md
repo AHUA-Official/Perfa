@@ -86,7 +86,7 @@ curl http://localhost:10000/
 - Node Agent 日志: `/tmp/agent.log`
 - Node Agent 健康接口: `http://localhost:8080/health`
 - FastAPI 根接口: `http://localhost:10000/`
-- 部署状态脚本: `ops/scripts/status-local-infra.sh`
+- 部署状态脚本: `ops/scripts/status-point.sh`
 
 ## 测试文档的定位
 

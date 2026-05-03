@@ -7,7 +7,7 @@
 当前最直接、已实跑通过的统一入口是：
 
 ```bash
-bash /home/ubuntu/Perfa/ops/scripts/start-local.sh
+bash /home/ubuntu/Perfa/ops/scripts/start-all.sh
 ```
 
 对应拓扑：
@@ -29,7 +29,7 @@ node_agent metrics (:8000)
 如果只需要监控栈和执行端，入口是：
 
 ```bash
-bash /home/ubuntu/Perfa/ops/scripts/start-local-infra.sh
+bash /home/ubuntu/Perfa/ops/scripts/start-point.sh
 ```
 
 对应拓扑：
@@ -64,7 +64,7 @@ node_agent (:8080 / :8000)
 
 - `langchain_agent` 通过 MCP SSE 地址连接 `mcp_server`
 - `mcp_server` 通过 `agent_client/` 访问 `node_agent`
-- `DeployAgentTool` / `UninstallAgentTool` 已切换到 `ops/scripts/start-local-infra.sh` 和 `ops/scripts/stop-local-infra.sh`
+- `DeployAgentTool` / `UninstallAgentTool` 已切换到 `ops/scripts/start-point.sh` 和 `ops/scripts/stop-point.sh`
 
 ## 远端节点模式
 
@@ -80,6 +80,6 @@ node_agent (:8080 / :8000)
 ## 当前结论
 
 - 最可靠、最完整、已实跑验证的标准模式是本地完整开发链路。
-- `ops/scripts/start-local.sh` 是当前统一总入口。
+- `ops/scripts/start-all.sh` 是当前统一总入口。
 - 混合模式在代码上成立，但仓库里还没有比本地链路更完整的统一一键脚本。
 - 阅读和维护时，应优先把 `ops/` 视为运行入口，把 `src/` 视为实现入口。

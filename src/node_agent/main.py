@@ -15,6 +15,7 @@ import time
 import logging
 from typing import Optional
 import os
+from pathlib import Path
 from prometheus_client import start_http_server
 
 from monitor import Monitor
@@ -23,14 +24,29 @@ from api.server import APIServer
 from benchmark.executor import BenchmarkExecutor
 from privilege import get_privilege_config
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+
+def _configure_logging():
+    """配置日志到仓库根目录 logs/，并支持环境变量覆盖。"""
+    project_root = Path(__file__).resolve().parents[2]
+    log_dir = project_root / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    log_file = Path(os.getenv("PERFA_NODE_AGENT_LOG", str(log_dir / "node_agent.log")))
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    handlers = [logging.FileHandler(log_file, encoding="utf-8")]
+    if os.getenv("PERFA_LOG_TO_STDOUT", "true").lower() == "true":
+        handlers.append(logging.StreamHandler(sys.stdout))
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s',
+        handlers=handlers,
+        force=True,
+    )
+
+
+_configure_logging()
 
 logger = logging.getLogger(__name__)
 

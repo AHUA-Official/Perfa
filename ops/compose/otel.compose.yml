@@ -22,6 +22,7 @@ services:
     container_name: perfa-jaeger
     environment:
       - COLLECTOR_OTLP_ENABLED=true
+      - QUERY_BASE_PATH=/api/monitor/jaeger
     ports:
       - "16686:16686"
       - "14268:14268"

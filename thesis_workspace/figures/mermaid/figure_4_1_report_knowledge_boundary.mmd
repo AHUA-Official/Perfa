@@ -1,0 +1,18 @@
+flowchart TD
+    subgraph Implemented[已实现链路]
+        A[Benchmark 结果] --> B[generate_report Tool / LLM 报告节点]
+        C[错误记录与工具调用] --> B
+        L[FurinaBench Markdown 知识库] --> M[search_benchmark_knowledge]
+        M --> B
+        B --> D[ReportStore]
+        D --> E[ReportsPage<br/>AI 结论 + 知识依据 + 原始证据]
+    end
+    subgraph Reserved[扩展预留链路]
+        F[历史报告] --> H[Embedding]
+        G[codeknowledge 文档] --> H
+        L2[FurinaBench 文档] --> H
+        H --> I[Vector Store]
+        I --> J[相似报告 / 知识片段检索]
+        J --> K[RAG 增强报告生成]
+    end
+    E -.后续增强.-> J

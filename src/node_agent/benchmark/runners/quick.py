@@ -44,7 +44,7 @@ class SysbenchCpuRunner(_PackageRunner):
     description = "sysbench CPU quick benchmark"
     category = "cpu"
     typical_duration_seconds = 30
-    requires_async = False
+    requires_async = True
 
     def build_command(self, task: BenchmarkTask) -> List[str]:
         params = task.params or {}
@@ -71,7 +71,7 @@ class SysbenchMemoryRunner(_PackageRunner):
     description = "sysbench memory quick benchmark"
     category = "mem"
     typical_duration_seconds = 30
-    requires_async = False
+    requires_async = True
 
     def build_command(self, task: BenchmarkTask) -> List[str]:
         params = task.params or {}
@@ -106,7 +106,7 @@ class SysbenchThreadsRunner(_PackageRunner):
     description = "sysbench threads quick benchmark"
     category = "cpu"
     typical_duration_seconds = 20
-    requires_async = False
+    requires_async = True
 
     def build_command(self, task: BenchmarkTask) -> List[str]:
         params = task.params or {}
@@ -140,7 +140,7 @@ class OpenSSLRunner(_PackageRunner):
     description = "OpenSSL speed quick benchmark"
     category = "cpu"
     typical_duration_seconds = 20
-    requires_async = False
+    requires_async = True
 
     def build_command(self, task: BenchmarkTask) -> List[str]:
         params = task.params or {}
@@ -165,7 +165,7 @@ class StressNgRunner(_PackageRunner):
     description = "stress-ng quick benchmark"
     category = "cpu"
     typical_duration_seconds = 45
-    requires_async = False
+    requires_async = True
 
     def build_command(self, task: BenchmarkTask) -> List[str]:
         params = task.params or {}
@@ -202,7 +202,7 @@ class Iperf3Runner(_PackageRunner):
     description = "iperf3 short network throughput benchmark"
     category = "net"
     typical_duration_seconds = 20
-    requires_async = False
+    requires_async = True
 
     def prepare(self, task: BenchmarkTask, tool_manager) -> bool:
         if not super().prepare(task, tool_manager):
@@ -273,7 +273,7 @@ class SevenZipRunner(_PackageRunner):
     description = "7-Zip short benchmark"
     category = "cpu"
     typical_duration_seconds = 90
-    requires_async = False
+    requires_async = True
 
     def build_command(self, task: BenchmarkTask) -> List[str]:
         params = task.params or {}

@@ -7,20 +7,33 @@ const nextConfig = {
         source: '/api/v1/:path*',
         destination: 'http://localhost:10000/v1/:path*',
       },
-      // Jaeger 全站代理（解决浏览器 Private Network Access 阻止）
+      {
+        source: '/api/monitor/grafana',
+        destination: 'http://localhost:3000/api/monitor/grafana/',
+      },
+      {
+        source: '/api/monitor/grafana/:path*',
+        destination: 'http://localhost:3000/api/monitor/grafana/:path*',
+      },
+      {
+        source: '/api/monitor/jaeger',
+        destination: 'http://localhost:16686/api/monitor/jaeger/',
+      },
+      {
+        source: '/api/monitor/jaeger/:path*',
+        destination: 'http://localhost:16686/api/monitor/jaeger/:path*',
+      },
+      {
+        source: '/api/monitor/vm',
+        destination: 'http://localhost:8428/',
+      },
+      {
+        source: '/api/monitor/vm/:path*',
+        destination: 'http://localhost:8428/:path*',
+      },
       {
         source: '/api/jaeger/:path*',
-        destination: 'http://localhost:16686/:path*',
-      },
-      // Grafana 代理
-      {
-        source: '/api/grafana/:path*',
-        destination: 'http://localhost:3000/:path*',
-      },
-      // VictoriaMetrics 代理
-      {
-        source: '/api/vm/:path*',
-        destination: 'http://localhost:8428/:path*',
+        destination: 'http://localhost:16686/api/monitor/jaeger/:path*',
       },
     ];
   },

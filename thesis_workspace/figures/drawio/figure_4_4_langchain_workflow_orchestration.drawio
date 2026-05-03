@@ -1,0 +1,62 @@
+<mxfile host="app.diagrams.net" modified="2026-05-03T00:00:00.000Z" agent="Codex" version="24.7.5" type="device">
+  <diagram id="fig_4_4" name="Page-1">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="940" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="图 4-4 LangChain Agent 工作流编排图" style="text;html=1;strokeColor=none;fillColor=none;fontSize=22;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="610" y="20" width="680" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="api" value="FastAPI 后端&#xa;/v1/chat/completions&#xa;OpenAI 兼容接口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="170" width="230" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="orch" value="AgentOrchestrator&#xa;会话记忆 / LLM / 工具 / 报告&#xa;auto 或 react 模式" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="390" y="160" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="router" value="ScenarioRouter&#xa;关键词匹配 + LLM 路由&#xa;quick / full / cpu / storage / network" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="760" y="110" width="290" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="decision" value="性能测试场景？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="825" y="300" width="160" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="react" value="ReActAgent&#xa;自由问答或通用工具调用&#xa;max_iterations 控制循环" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="760" y="550" width="290" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="workflow" value="WorkflowEngine&#xa;场景图执行&#xa;环境检查 / 工具检查 / Benchmark / 报告" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="290" width="310" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="adapter" value="MCPToolAdapter&#xa;加载 MCP Tool schema&#xa;包装为 LangChain Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="530" width="310" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="mcp" value="MCP Server Tools&#xa;server / agent / tool / benchmark / report" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="530" width="280" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="stream" value="流式 metadata 事件&#xa;workflow_progress / tool_result / summary&#xa;trace_id / jaeger_url" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="390" y="520" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="report" value="ReportStore&#xa;保存工作流报告&#xa;raw_results / errors / task_ids / tool_calls" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="730" width="310" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="memory" value="ConversationMemory&#xa;用户消息 / 助手回复 / 工具调用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="80" y="520" width="230" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="otel" value="OTel 可观测性&#xa;span / metrics / trace_id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="80" y="710" width="230" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="聊天请求" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="api" target="orch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="auto 路由" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="orch" target="router"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="场景结果" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="router" target="decision"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="是" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="decision" target="workflow"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="否 / free_chat" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="decision" target="react"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="调用工具" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="workflow" target="adapter"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="MCP over SSE" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="adapter" target="mcp"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="工作流结果" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="workflow" target="stream"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="过程事件返回前端" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="stream" target="api"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" value="报告持久化" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="workflow" target="report"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" value="记录会话" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="orch" target="memory"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e12" value="追踪处理过程" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="orch" target="otel"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e13" value="通用工具调用" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="react" target="adapter"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

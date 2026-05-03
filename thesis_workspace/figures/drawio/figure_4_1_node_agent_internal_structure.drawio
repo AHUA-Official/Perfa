@@ -1,0 +1,91 @@
+<mxfile host="app.diagrams.net" modified="2026-05-03T00:00:00.000Z" agent="Codex" version="24.7.5" type="device">
+  <diagram id="fig_4_1" name="Page-1">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="920" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="图 4-1 Node Agent 内部结构图" style="text;html=1;strokeColor=none;fillColor=none;fontSize=22;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="560" y="20" width="680" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="agent" value="NodeAgent&#xa;src/node_agent/main.py&#xa;生命周期控制与模块装配" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="720" y="110" width="300" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="api" value="APIServer / Flask API&#xa;health / monitor / tool / benchmark&#xa;默认端口 8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="120" y="340" width="270" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="monitor" value="Monitor 后台线程&#xa;CPU / Memory / Disk / Network&#xa;默认 5 秒采样" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="470" y="340" width="270" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="tool" value="ToolManager&#xa;工具检查 / 安装 / 卸载 / 校验&#xa;fio / stream / unixbench / iperf3 等" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="820" y="340" width="290" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="executor" value="BenchmarkExecutor&#xa;任务状态 / 并发锁 / Runner 调度&#xa;日志与结果收集" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="340" width="290" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="metrics" value="Prometheus Metrics Server&#xa;/metrics&#xa;默认端口 8000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="470" y="570" width="270" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="collectors" value="Collectors&#xa;psutil 采集资源状态&#xa;并更新 Gauge 指标" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="470" y="710" width="270" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="runners" value="Runner 集合&#xa;Fio / Stream / UnixBench / MLC&#xa;Sysbench / OpenSSL / stress-ng / 7z" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="820" y="570" width="290" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="tools" value="Benchmark Tools&#xa;系统命令与测试二进制&#xa;由具体 Tool 类维护" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="820" y="720" width="290" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="result" value="ResultCollector&#xa;benchmark_results.db&#xa;任务日志与指标结果" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="570" width="290" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="workdir" value="工作目录与日志文件&#xa;/tmp/benchmark_work&#xa;/var/lib/node_agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="720" width="290" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="client" value="MCP Server / 本地测试脚本" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="120" y="570" width="270" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_agent_api" value="启动并注册蓝图" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="agent" target="api">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_agent_monitor" value="启动后台采集" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="agent" target="monitor">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_agent_tool" value="初始化工具状态" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="agent" target="tool">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_agent_executor" value="注册执行器" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="agent" target="executor">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_client_api" value="HTTP API" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="client" target="api">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_api_tool" value="工具管理请求" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="api" target="tool">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_api_exec" value="Benchmark 请求" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="api" target="executor">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_monitor_metrics" value="更新指标" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="monitor" target="metrics">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_monitor_collectors" value="调用采集器" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="monitor" target="collectors">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_tool_runners" value="提供工具状态" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="tool" target="runners">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_runners_tools" value="构建测试命令" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="runners" target="tools">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_exec_runners" value="调度 Runner" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="executor" target="runners">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_exec_result" value="保存结果" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="executor" target="result">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge_exec_workdir" value="创建工作现场" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="executor" target="workdir">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

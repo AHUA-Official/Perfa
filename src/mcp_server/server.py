@@ -1,5 +1,8 @@
 """MCP Server 核心实现"""
 import logging
+import os
+import sys
+from pathlib import Path
 from typing import Dict, Any, List
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
@@ -8,11 +11,28 @@ from storage import Database
 from tools.base import BaseTool
 
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='{"time": "%(asctime)s", "level": "%(levelname)s", "message": "%(message)s"}'
-)
+def _configure_logging():
+    """配置日志到仓库根目录 logs/，并支持环境变量覆盖。"""
+    project_root = Path(__file__).resolve().parents[2]
+    log_dir = project_root / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    log_file = Path(os.getenv("PERFA_MCP_SERVER_LOG", str(log_dir / "mcp_server.log")))
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    handlers = [logging.FileHandler(log_file, encoding="utf-8")]
+    if os.getenv("PERFA_LOG_TO_STDOUT", "true").lower() == "true":
+        handlers.append(logging.StreamHandler(sys.stdout))
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='{"time": "%(asctime)s", "level": "%(levelname)s", "message": "%(message)s"}',
+        handlers=handlers,
+        force=True,
+    )
+
+
+_configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -83,7 +103,9 @@ class MCPServer:
         
         # 智能分析
         from tools.report_tools import GenerateReportTool
+        from tools.knowledge_tools import BenchmarkKnowledgeSearchTool
         
+        self.register_tool(BenchmarkKnowledgeSearchTool())
         self.register_tool(GenerateReportTool(self.db))
     
     def list_tools(self) -> List[Dict[str, Any]]:

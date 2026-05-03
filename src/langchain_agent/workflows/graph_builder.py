@@ -96,7 +96,7 @@ class WorkflowEngine:
         """
         return await self.router.route(query)
     
-    async def run(self, scenario_name: str, query: str, session_id: str) -> Dict[str, Any]:
+    async def run(self, scenario_name: str, query: str, session_id: str, server_id: Optional[str] = None) -> Dict[str, Any]:
         """
         执行指定场景的工作流
         
@@ -125,6 +125,8 @@ class WorkflowEngine:
         
         # 创建初始状态
         initial_state = create_initial_state(query, session_id, scenario_name)
+        if server_id:
+            initial_state["server_id"] = server_id
         
         try:
             # 执行工作流
@@ -145,6 +147,7 @@ class WorkflowEngine:
                 "task_ids": final_state.get("task_ids", {}),
                 "results": final_state.get("results", {}),
                 "errors": final_state.get("errors", []),
+                "knowledge_matches": final_state.get("knowledge_matches", []),
                 "node_statuses": final_state.get("node_statuses", {}),
                 "completed_nodes": final_state.get("completed_nodes", []),
                 "server_id": final_state.get("server_id"),

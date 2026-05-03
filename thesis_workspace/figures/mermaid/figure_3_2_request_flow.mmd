@@ -1,0 +1,13 @@
+flowchart LR
+    A[用户输入测试需求] --> B[WebUI V2<br/>发送流式请求]
+    B --> C[LangChain Agent<br/>场景路由]
+    C --> D{是否性能测试场景}
+    D -->|是| E[WorkflowEngine<br/>选择场景图]
+    D -->|否| F[ReAct / 自由对话]
+    E --> G[MCPToolAdapter<br/>调用 MCP Tool]
+    G --> H[MCP Server<br/>执行 Tool]
+    H --> I[Node Agent<br/>运行 Benchmark]
+    I --> J[返回任务状态和结果]
+    J --> K[生成报告并持久化]
+    K --> L[WebUI 展示回答<br/>进度 / 报告 / 证据]
+    F --> L

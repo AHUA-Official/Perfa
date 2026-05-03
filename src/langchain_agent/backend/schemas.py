@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage] = Field(..., description="Chat messages")
     session_id: Optional[str] = Field(default=None, description="Session ID")
     conversation_id: Optional[str] = Field(default=None, description="Conversation ID")
+    server_id: Optional[str] = Field(default=None, description="Target server ID context")
     stream: bool = Field(default=False, description="Enable streaming output")
     temperature: Optional[float] = Field(default=None, description="Temperature (ignored)")
     max_tokens: Optional[int] = Field(default=None, description="Max tokens (ignored)")
@@ -108,10 +109,17 @@ class ReportInfo(BaseModel):
     """报告摘要信息"""
     id: str = Field(..., description="报告 ID")
     type: str = Field(..., description="测试类型")
+    title: Optional[str] = Field(None, description="报告标题")
+    scenario: Optional[str] = Field(None, description="工作流场景")
+    scenario_label: Optional[str] = Field(None, description="场景展示名")
     server_id: str = Field(..., description="服务器 ID")
+    server_alias: Optional[str] = Field(None, description="服务器别名")
+    server_ip: Optional[str] = Field(None, description="服务器 IP")
     created_at: str = Field(..., description="创建时间")
     status: str = Field("completed", description="报告状态")
     summary: Optional[str] = Field(None, description="摘要")
+    source: Optional[str] = Field("workflow", description="报告来源")
+    test_count: Optional[int] = Field(0, description="包含的测试数量")
 
 
 class ReportListResponse(BaseModel):
@@ -123,11 +131,25 @@ class ReportDetail(BaseModel):
     """报告详情"""
     id: str
     type: str
+    title: Optional[str] = None
+    scenario: Optional[str] = None
+    scenario_label: Optional[str] = None
     server_id: str
+    server_alias: Optional[str] = None
+    server_ip: Optional[str] = None
     created_at: str
     status: str = "completed"
     summary: Optional[str] = None
-    content: Optional[Dict[str, Any]] = None
+    ai_report: Optional[str] = None
+    content: Optional[Any] = None
+    raw_results: Optional[Dict[str, Any]] = None
+    raw_errors: Optional[List[Dict[str, Any]]] = None
+    knowledge_matches: Optional[List[Dict[str, Any]]] = None
+    task_ids: Optional[Dict[str, str]] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+    trace_id: Optional[str] = None
+    query: Optional[str] = None
+    source: Optional[str] = "workflow"
     charts: Optional[List[Dict[str, Any]]] = None
 
 

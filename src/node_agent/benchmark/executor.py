@@ -69,7 +69,9 @@ class BenchmarkExecutor:
         
         # 任务管理
         self._current_task: Optional[BenchmarkTask] = None
-        self._task_lock = threading.Lock()
+        # run_benchmark() 会在持锁路径里调用 is_busy()/get_current_task()；
+        # 这里必须使用可重入锁，否则会自锁把 HTTP 请求线程卡死。
+        self._task_lock = threading.RLock()
         self._tasks: Dict[str, BenchmarkTask] = {}
         
         # 运行器注册
@@ -120,11 +122,12 @@ class BenchmarkExecutor:
             同步任务: {"task_id": "xxx", "status": "completed", "result": {...}}
             异步任务: {"task_id": "xxx", "status": "running"}
         """
-        # 检查运行器
+        # 短测 runner 的 test_name 不是工具名，先映射到真实依赖工具名
         if test_name not in self._runners:
             raise BenchmarkError(f"No runner registered for: {test_name}")
-        
+
         runner = self._runners[test_name]
+        tool_name = getattr(runner, "tool_name", "") or test_name
 
         # 检查是否忙碌
         with self._task_lock:
@@ -188,20 +191,26 @@ class BenchmarkExecutor:
         执行任务的核心逻辑
         """
         log_path = None
+        tool_name = getattr(runner, "tool_name", "") or task.test_name
         
         try:
             # ========== 准备阶段 ==========
             self._update_status(task, TaskStatus.PREPARING)
             
             # 检查工具
-            tool_status = self.tool_manager.check_tool(task.test_name)
+            tool_status = self.tool_manager.check_tool(tool_name)
             status = tool_status.get("status")
             # 支持 Enum 和字符串两种格式
             status_value = status.value if hasattr(status, 'value') else status
             if status_value != "installed":
-                raise ToolNotInstalledError(
-                    f"Tool {task.test_name} not installed: {tool_status}"
-                )
+                if tool_name == task.test_name:
+                    tool_status = self.tool_manager.check_tool(task.test_name)
+                    status = tool_status.get("status")
+                    status_value = status.value if hasattr(status, 'value') else status
+                if status_value != "installed":
+                    raise ToolNotInstalledError(
+                        f"Tool {task.test_name} not installed: {tool_status}"
+                    )
             
             # 准备运行器
             if not runner.prepare(task, self.tool_manager):
@@ -235,7 +244,8 @@ class BenchmarkExecutor:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                cwd=task.working_dir
+                cwd=task.working_dir,
+                env=getattr(task, "_env", None),
             )
             
             # 读取输出

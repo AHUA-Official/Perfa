@@ -1,0 +1,12 @@
+flowchart TD
+    Browser[Browser] --> Web[WebUI V2 :3002]
+    Web --> Backend[LangChain Backend :10000]
+    Backend --> MCP[MCP Server :9000]
+    MCP --> Agent[Node Agent API :8080]
+    Agent --> Metrics[Node Agent Metrics :8000]
+    Metrics --> VM[VictoriaMetrics :8428]
+    VM --> Grafana[Grafana :3000]
+    Backend --> OTel[OTel Collector :4317/:4318]
+    MCP --> OTel
+    Agent --> OTel
+    OTel --> Jaeger[Jaeger UI :16686]

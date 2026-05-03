@@ -67,20 +67,41 @@ export interface WorkflowStatus {
 export interface ReportInfo {
   id: string;
   type: string;
+  title?: string;
+  scenario?: string;
+  scenario_label?: string;
   server_id: string;
+  server_alias?: string;
+  server_ip?: string;
   created_at: string;
   status: string;
   summary?: string;
+  source?: string;
+  test_count?: number;
 }
 
 export interface ReportDetail {
   id: string;
   type: string;
+  title?: string;
+  scenario?: string;
+  scenario_label?: string;
   server_id: string;
+  server_alias?: string;
+  server_ip?: string;
   created_at: string;
   status: string;
   summary?: string;
+  ai_report?: string;
   content?: any;
+  raw_results?: Record<string, any>;
+  raw_errors?: Array<Record<string, any>>;
+  knowledge_matches?: Array<Record<string, any>>;
+  task_ids?: Record<string, string>;
+  tool_calls?: Array<Record<string, any>>;
+  trace_id?: string;
+  query?: string;
+  source?: string;
   charts?: any;
 }
 
@@ -234,7 +255,7 @@ export async function getLatestReport(serverId?: string): Promise<ReportDetail |
 }
 
 export async function getTraceSummary(traceId: string): Promise<TraceSummary> {
-  const res = await fetch(`${API_BASE}/jaeger/api/traces/${traceId}`);
+  const res = await fetch(`/api/monitor/jaeger/api/traces/${traceId}`);
   if (!res.ok) throw new Error(`Trace not found: ${traceId}`);
   const data = await res.json();
   const trace = data.data?.[0];

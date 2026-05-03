@@ -49,7 +49,7 @@ OTEL_CONSOLE_EXPORT=true
 bash /home/ubuntu/Perfa/ops/scripts/start-langchain-backend.sh
 ```
 
-注意：统一入口 `ops/scripts/start-local.sh` 内部已经处理了稳定的后台启动方式。
+注意：统一入口 `ops/scripts/start-all.sh` 内部已经处理了稳定的后台启动方式。
 
 ### Web UI V2
 
@@ -66,7 +66,7 @@ bash /home/ubuntu/Perfa/ops/scripts/start-mcp-server.sh
 ### 本地完整链路
 
 ```bash
-bash /home/ubuntu/Perfa/ops/scripts/start-local.sh
+bash /home/ubuntu/Perfa/ops/scripts/start-all.sh
 ```
 
 ## 历史演进摘要
@@ -124,7 +124,7 @@ AI IDE -> MCP Server -> LangChain Agent -> SSH 执行器 -> 目标服务器
 仍待继续推进的事项包括：
 
 - 前端可观测性面板
-- OTel Collector + Jaeger 默认不在 `start-local.sh` 中启动，仍需单独联调
+- OTel Collector + Jaeger 默认不在 `start-all.sh` 中启动，仍需单独联调
 - 全链路集成测试
 - 报告图表与监控增强
 

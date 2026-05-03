@@ -20,7 +20,7 @@ class StreamRunner(BaseRunner):
     description = "STREAM memory bandwidth benchmark"
     category = "mem"
     typical_duration_seconds = 300  # 5分钟
-    requires_async = False  # 同步执行
+    requires_async = True  # 异步执行，提交后立即返回 task_id
 
     def prepare(self, task: BenchmarkTask, tool_manager) -> bool:
         """

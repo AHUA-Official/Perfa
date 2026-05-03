@@ -1,0 +1,64 @@
+<mxfile host="app.diagrams.net" modified="2026-05-03T00:00:00.000Z" agent="Codex" version="24.7.5" type="device">
+  <diagram id="fig_4_5" name="Page-1">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="920" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="图 4-5 WebUI V2 页面与数据流图" style="text;html=1;strokeColor=none;fillColor=none;fontSize=22;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="610" y="20" width="680" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="browser" value="用户浏览器&#xa;自然语言输入与页面操作" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="140" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="shell" value="HomePage / Layout&#xa;侧边导航 + 会话历史&#xa;chat / servers / reports / monitor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="120" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="chat" value="ChatPage&#xa;消息列表 / 服务器选择&#xa;ChatInput + WorkflowProgress" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="760" y="90" width="260" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="servers" value="ServersPage&#xa;服务器列表&#xa;Agent 部署 / 状态 / 卸载" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="760" y="250" width="260" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="reports" value="ReportsPage&#xa;报告列表 + 详情抽屉&#xa;AI 结论 / 原始结果 / 工具调用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="760" y="410" width="260" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="monitor" value="MonitorPage&#xa;资源状态与监控入口&#xa;CPU / Memory / Disk / Network" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="760" y="590" width="260" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="store" value="Zustand useChatStore&#xa;messages / sessions / activeSessionId&#xa;流式消息状态" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="360" y="520" width="280" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="api" value="src/lib/api.ts&#xa;chatCompletionStream / listServers&#xa;listReports / getTraceSummary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="260" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="sse" value="consumeSSEStream&#xa;content chunk + metadata&#xa;workflow / summary / trace_id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="90" width="300" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="proxy" value="Next.js API 代理&#xa;/api/v1/*&#xa;屏蔽跨域与后端地址" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="260" width="260" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="backend" value="LangChain Backend&#xa;/v1/chat/completions&#xa;/v1/servers / /v1/reports" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="500" width="260" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="trace" value="Jaeger Trace API&#xa;/api/monitor/jaeger/api/traces/{trace_id}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="600" width="300" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="访问页面" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="browser" target="shell"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="页面切换" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="shell" target="chat"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="页面切换" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="shell" target="servers"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="页面切换" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="shell" target="reports"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="页面切换" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="shell" target="monitor"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="读写消息和会话" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="chat" target="store"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="发起流式对话" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="chat" target="api"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="解析 SSE" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="sse" target="chat"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="ReadableStream" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="api" target="sse"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" value="服务器 API" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="servers" target="api"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" value="报告 API" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="reports" target="api"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e12" value="Trace 查询" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="reports" target="trace"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e13" value="监控查询" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="monitor" target="api"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e14" value="/api 代理" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="api" target="proxy"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e15" value="后端请求" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="proxy" target="backend"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -104,6 +104,70 @@ def _parse_tool_result_payload(result: Any) -> dict:
     return {}
 
 
+def _category_for_test(test_name: str) -> str:
+    if test_name in {"cpu_test", "unixbench", "superpi", "sysbench_cpu", "sysbench_threads", "openssl_speed", "stress_ng", "7z_b"}:
+        return "cpu"
+    if test_name in {"memory_test", "stream", "mlc", "sysbench_memory"}:
+        return "memory"
+    if test_name in {"disk_test", "storage_test", "fio"}:
+        return "storage"
+    if test_name in {"network_test", "iperf3", "hping3"}:
+        return "network"
+    return "general"
+
+
+async def _retrieve_knowledge_context(state: WorkflowState, *, tools: dict = None) -> list[dict]:
+    """Retrieve FurinaBench knowledge snippets for tests in the current workflow."""
+    knowledge_tool = tools.get("search_benchmark_knowledge") if tools else None
+    if not knowledge_tool:
+        return []
+
+    results = state.get("results", {})
+    scenario = state.get("scenario", "")
+    query = state.get("query", "")
+    matches: list[dict] = []
+    seen = set()
+
+    test_names = list(results.keys()) or [scenario]
+    for test_name in test_names[:6]:
+        args = {
+            "query": f"{query} {test_name} 性能指标 参数 结果分析",
+            "test_name": test_name,
+            "category": _category_for_test(test_name),
+            "limit": 2,
+        }
+        try:
+            if hasattr(knowledge_tool, "ainvoke"):
+                raw = await knowledge_tool.ainvoke(args)
+            else:
+                raw = knowledge_tool.run(args)
+            payload = _parse_tool_result_payload(raw)
+            for match in payload.get("matches", []):
+                key = match.get("path")
+                if key and key not in seen:
+                    seen.add(key)
+                    item = dict(match)
+                    item["test_name"] = test_name
+                    matches.append(item)
+        except Exception as e:
+            logger.warning(f"[Workflow] 知识库检索失败: {test_name}: {e}")
+
+    return matches[:8]
+
+
+def _format_knowledge_context(matches: list[dict]) -> str:
+    if not matches:
+        return "无可用知识库片段"
+    parts = []
+    for idx, match in enumerate(matches, 1):
+        parts.append(
+            f"{idx}. [{match.get('test_name', 'benchmark')}] {match.get('title', '')} "
+            f"({match.get('path', '')})\n"
+            f"   {match.get('snippet', '')[:320]}"
+        )
+    return "\n".join(parts)
+
+
 def _extract_server_identity(server: dict) -> tuple[str, str, str, str]:
     """兼容不同服务器字段命名"""
     server_id = server.get("server_id") or server.get("id") or ""
@@ -820,6 +884,8 @@ async def generate_report(state: WorkflowState, *, llm=None, tools: dict = None)
     scenario = state.get("scenario", "")
     server_ip = state.get("server_ip", "unknown")
     query = state.get("query", "")
+    knowledge_matches = await _retrieve_knowledge_context(state, tools=tools)
+    updates["knowledge_matches"] = knowledge_matches
     
     # 如果有 generate_report 工具，先用它
     report_tool = tools.get("generate_report") if tools else None
@@ -846,6 +912,7 @@ async def generate_report(state: WorkflowState, *, llm=None, tools: dict = None)
         try:
             results_str = json.dumps(results, ensure_ascii=False, indent=2, default=str)[:3000]
             errors_str = json.dumps(errors, ensure_ascii=False, indent=2)[:1000]
+            knowledge_str = _format_knowledge_context(knowledge_matches)
             
             prompt = f"""你是一位专业的服务器性能测试分析师。请根据以下测试结果生成一份专业的性能评估报告。
 
@@ -868,11 +935,16 @@ async def generate_report(state: WorkflowState, *, llm=None, tools: dict = None)
 {errors_str}
 ```
 
+## Benchmark 知识库检索片段
+{knowledge_str}
+
 请生成 Markdown 格式的报告，包含：
 1. 测试概述
 2. 各项指标分析
-3. 性能评估总结
-4. 优化建议（如有）
+3. 结合知识库片段解释关键指标、测试方法或注意事项
+4. 性能评估总结
+5. 优化建议（如有）
+要求：如果引用知识库内容，请在句末标注对应文件路径；不要编造未出现在测试结果或知识库片段中的结论。
 """
             
             response = await llm.ainvoke(prompt)

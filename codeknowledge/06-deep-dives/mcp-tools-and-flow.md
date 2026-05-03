@@ -135,7 +135,7 @@ tool: get_server_info
 2. 创建安装目录
 3. `rsync` 传输 `ops/` 和 `src/node_agent/`
 4. 安装 Python 依赖
-5. 调用 `ops/scripts/start-local-infra.sh`
+5. 调用 `ops/scripts/start-point.sh`
 6. 验证 Agent 健康状态
 
 ## 关键文件索引

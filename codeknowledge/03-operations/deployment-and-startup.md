@@ -15,7 +15,7 @@
 
 ## 现有脚本
 
-### `ops/scripts/start-local-infra.sh`
+### `ops/scripts/start-point.sh`
 
 这是面向本地全栈中“监控栈 + Node Agent”的脚本，当前会：
 
@@ -31,7 +31,7 @@
 - LangChain Agent API
 - Web UI V2
 
-### `ops/scripts/status-local-infra.sh`
+### `ops/scripts/status-point.sh`
 
 用于查看：
 
@@ -46,7 +46,7 @@
 直接使用统一入口：
 
 ```bash
-bash /home/ubuntu/Perfa/ops/scripts/start-local.sh
+bash /home/ubuntu/Perfa/ops/scripts/start-all.sh
 ```
 
 它会按顺序拉起：
@@ -62,13 +62,13 @@ bash /home/ubuntu/Perfa/ops/scripts/start-local.sh
 
 ```bash
 # 启动
-bash /home/ubuntu/Perfa/ops/scripts/start-local.sh
+bash /home/ubuntu/Perfa/ops/scripts/start-all.sh
 
 # 查看状态
-bash /home/ubuntu/Perfa/ops/scripts/status-local.sh
+bash /home/ubuntu/Perfa/ops/scripts/status-all.sh
 
 # 停止
-bash /home/ubuntu/Perfa/ops/scripts/stop-local.sh
+bash /home/ubuntu/Perfa/ops/scripts/stop-all.sh
 ```
 
 ## 远程 / 混合部署现实
@@ -87,5 +87,5 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 
 ## 当前注意点
 
-- `ops/scripts/start-local-infra.sh` 会调用 `sudo docker`，适合本地运维启动，不适合作为纯开发脚本假设。
-- LangChain Agent 当前最稳定的后台启动方式，已经固化在 `ops/scripts/start-local.sh` 中。
+- `ops/scripts/start-point.sh` 会调用 `sudo docker`，适合本地运维启动，不适合作为纯开发脚本假设。
+- LangChain Agent 当前最稳定的后台启动方式，已经固化在 `ops/scripts/start-all.sh` 中。

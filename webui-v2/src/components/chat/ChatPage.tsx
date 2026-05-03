@@ -37,6 +37,7 @@ export default function ChatPage() {
   const [servers, setServers] = useState<ServerInfo[]>([]);
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
   const [serversLoading, setServersLoading] = useState(false);
+  const selectedServerInfo = servers.find((server) => server.server_id === selectedServer) || null;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -127,7 +128,7 @@ export default function ChatPage() {
           .filter((m) => !m.isStreaming)
           .map((m) => ({ role: m.role, content: m.content }));
         const currentServer =
-          servers.find((server) => server.server_id === selectedServer) ||
+          selectedServerInfo ||
           servers.find((server) => server.status === 'online');
 
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api';
@@ -140,6 +141,7 @@ export default function ChatPage() {
             stream: true,
             session_id: currentState.sessionId || sessionId,
             conversation_id: currentState.conversationId || conversationId || currentState.sessionId || sessionId,
+            server_id: selectedServer || undefined,
           }),
           signal: controller.signal,
         });
@@ -261,17 +263,13 @@ export default function ChatPage() {
         loadSessions();
       }
     },
-    [addMessage, updateMessage, setLoading, isLoading, sessionId, conversationId, loadSessions]
+    [addMessage, updateMessage, setLoading, isLoading, sessionId, conversationId, loadSessions, selectedServer, selectedServerInfo]
   );
 
-  // 点击服务器 IP → 在对话中插入 "测试 <ip> 服务器"
+  // 点击服务器 IP → 仅选择上下文，不自动发消息
   const handleServerClick = useCallback((server: ServerInfo) => {
     setSelectedServer(server.server_id);
-    const prompt = server.alias
-      ? `对服务器 ${server.alias} (${server.ip}) 执行性能测试`
-      : `对服务器 ${server.ip} 执行性能测试`;
-    sendMessage(prompt);
-  }, [sendMessage]);
+  }, []);
 
   const lastAssistantMsg = [...messages]
     .reverse()
@@ -379,8 +377,13 @@ export default function ChatPage() {
                 输入指令或选择快捷场景开始测试
               </p>
               <p className="text-xs text-text-muted mb-6 animate-fade-in-delay-3">
-                点击左侧服务器 IP 可直接对该服务器发起测试
+                点击左侧服务器 IP 先选中目标服务器，再在下方对话框发起测试
               </p>
+              {selectedServerInfo && (
+                <div className="mb-6 px-3 py-2 rounded-lg border border-primary/20 bg-primary/5 text-xs text-text-secondary">
+                  当前目标: {selectedServerInfo.alias ? `${selectedServerInfo.alias} (${selectedServerInfo.ip})` : selectedServerInfo.ip}
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 justify-center animate-fade-in-delay-4">
                 {SCENARIOS.map((s) => (
                   <button

@@ -1,0 +1,39 @@
+<mxfile host="app.diagrams.net" modified="2026-05-03T00:00:00.000Z" agent="Codex" version="24.7.5" type="device">
+  <diagram id="fig_5_1" name="Page-1">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="图 5-1 系统测试流程与验证链路图" style="text;html=1;strokeColor=none;fillColor=none;fontSize=22;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="610" y="20" width="680" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="env" value="测试环境确认&#xa;项目路径 / 日期 / 默认端口&#xa;记录测试约束" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="70" y="170" width="230" height="100" as="geometry"/></mxCell>
+        <mxCell id="startup" value="启动与状态检查&#xa;ops/scripts/status-all.sh&#xa;tmux 会话与服务端口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="380" y="170" width="250" height="100" as="geometry"/></mxCell>
+        <mxCell id="node" value="Node Agent 验证&#xa;/health&#xa;executor runtime&#xa;监控日志" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="730" y="110" width="240" height="110" as="geometry"/></mxCell>
+        <mxCell id="mcp" value="MCP Server 验证&#xa;数据库 unittest&#xa;SSE 入口状态" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="730" y="270" width="240" height="100" as="geometry"/></mxCell>
+        <mxCell id="workflow" value="LangChain 工作流验证&#xa;workflow nodes unittest&#xa;Orchestrator 回归测试" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1070" y="110" width="270" height="110" as="geometry"/></mxCell>
+        <mxCell id="webui" value="WebUI V2 验证&#xa;页面契约测试&#xa;runtime helper 测试&#xa;首页 HTTP 200" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1070" y="270" width="270" height="120" as="geometry"/></mxCell>
+        <mxCell id="e2e" value="端到端 Prompt 测试&#xa;test/test_prompt_cases.py&#xa;本轮未获得可判定输出" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1450" y="170" width="280" height="110" as="geometry"/></mxCell>
+        <mxCell id="record" value="结果记录&#xa;通过 / 失败 / 未完成&#xa;表 5-3 至表 5-5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="730" y="560" width="250" height="100" as="geometry"/></mxCell>
+        <mxCell id="analysis" value="结果分析&#xa;确认可用能力&#xa;暴露问题与修复优先级" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1070" y="560" width="270" height="100" as="geometry"/></mxCell>
+        <mxCell id="risk" value="测试边界&#xa;不把失败项写成通过&#xa;不使用 mock 数据冒充结果" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1450" y="560" width="280" height="100" as="geometry"/></mxCell>
+        <mxCell id="table1" value="判定标准&#xa;HTTP 状态码&#xa;关键字段&#xa;unittest OK / FAILED / ERROR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1"><mxGeometry x="70" y="520" width="230" height="110" as="geometry"/></mxCell>
+        <mxCell id="e1" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="env" target="startup"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="分层测试" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="startup" target="node"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="分层测试" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="startup" target="mcp"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="工作流测试" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="node" target="workflow"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="前端联调" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="mcp" target="webui"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="端到端验证" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="workflow" target="e2e"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="端到端验证" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="webui" target="e2e"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="输出证据" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="node" target="record"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="输出证据" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="mcp" target="record"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" value="输出证据" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="workflow" target="record"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" value="输出证据" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="webui" target="record"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e12" value="未完成项记录" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="e2e" target="risk"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e13" value="汇总分析" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="record" target="analysis"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e14" value="形成边界" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="analysis" target="risk"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e15" value="作为判定依据" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="table1" target="record"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

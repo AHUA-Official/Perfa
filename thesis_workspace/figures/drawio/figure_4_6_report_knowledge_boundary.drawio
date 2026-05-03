@@ -1,0 +1,59 @@
+<mxfile host="app.diagrams.net" modified="2026-05-03T00:00:00.000Z" agent="Codex" version="24.7.5" type="device">
+  <diagram id="fig_4_1" name="Page-1">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="已实现链路" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#43a047;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="760" height="390" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="扩展预留链路" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff8e1;strokeColor=#fb8c00;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="860" y="60" width="800" height="390" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="Benchmark 结果" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="110" y="150" width="140" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="错误记录与工具调用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="110" y="260" width="170" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="generate_report Tool / LLM 报告节点" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="340" y="205" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="ReportStore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="610" y="205" width="140" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="ReportsPage&#xa;AI 结论 + 原始证据" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="940" y="150" width="210" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="历史报告" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="940" y="270" width="150" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="codeknowledge 文档" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="270" width="170" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="Embedding" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="270" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="Vector Store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1520" y="270" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="相似报告 / 知识片段检索" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8e1;strokeColor=#fb8c00;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="150" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="RAG 增强报告生成" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8e1;strokeColor=#fb8c00;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="150" width="170" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="4" target="6"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="16" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="5" target="6"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="17" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="6" target="7"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="18" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="7" target="8"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="19" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="8" target="9"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="20" value="" style="endArrow=block;html=1;strokeWidth=2;dashed=1;" edge="1" parent="1" source="9" target="11"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="21" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="11" target="12"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="22" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="12" target="13"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="23" value="" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="13" target="14"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="24" value="" style="endArrow=block;html=1;strokeWidth=2;dashed=1;" edge="1" parent="1" source="8" target="13"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

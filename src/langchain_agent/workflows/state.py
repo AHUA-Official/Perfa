@@ -46,6 +46,7 @@ class WorkflowState(TypedDict, total=False):
     # ========== 输出 ==========
     messages: Annotated[list, add_messages]  # LangGraph 消息历史（自动合并）
     final_report: Optional[str]           # 最终报告
+    knowledge_matches: List[Dict[str, Any]] # Benchmark 知识库检索结果
     status: str                           # workflow 状态: running/completed/failed
 
 
@@ -71,5 +72,6 @@ def create_initial_state(query: str, session_id: str, scenario: str) -> Workflow
         node_statuses={},
         messages=[],
         final_report=None,
+        knowledge_matches=[],
         status="running",
     )

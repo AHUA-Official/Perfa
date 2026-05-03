@@ -110,11 +110,6 @@ class MCPToolAdapter:
             logger.error(f"加载MCP工具失败: {str(e)}")
             raise
     
-    async def _load_tools(self):
-        """从MCP Server加载工具（已废弃，使用_load_tools_with_session）"""
-        # 此方法已废弃，保留向后兼容
-        pass
-    
     def _wrap_tool(self, tool_info) -> BaseTool:
         """
         包装MCP工具为LangChain工具

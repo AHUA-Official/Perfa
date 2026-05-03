@@ -13,9 +13,9 @@ class OpsScriptsTestCase(unittest.TestCase):
 
     def test_core_scripts_exist_with_shebang(self):
         for script in [
-            "start-local.sh",
-            "stop-local.sh",
-            "status-local.sh",
+            "start-all.sh",
+            "stop-all.sh",
+            "status-all.sh",
             "start-mcp-server.sh",
         ]:
             path = OPS_DIR / script
@@ -24,14 +24,14 @@ class OpsScriptsTestCase(unittest.TestCase):
             self.assertTrue(content.startswith("#!/bin/bash"), script)
 
     def test_start_local_waits_for_all_core_services(self):
-        content = self._read("start-local.sh")
+        content = self._read("start-all.sh")
         self.assertIn("wait_for_http", content)
         self.assertIn("http://127.0.0.1:9000/sse?api_key=test-key-123", content)
         self.assertIn("http://127.0.0.1:10000/health", content)
         self.assertIn("http://127.0.0.1:3002", content)
 
     def test_status_local_reports_unavailable_instead_of_hiding_failures(self):
-        content = self._read("status-local.sh")
+        content = self._read("status-all.sh")
         self.assertIn("UNAVAILABLE", content)
         self.assertNotIn("|| true", content)
 

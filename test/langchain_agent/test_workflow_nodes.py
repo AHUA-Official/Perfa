@@ -9,6 +9,7 @@ sys.path.insert(0, str(SRC_DIR))
 from langchain_agent.workflows.nodes import (
     check_environment,
     check_tools,
+    generate_report,
     install_tools,
     run_benchmark,
     route_after_server_selection,
@@ -57,7 +58,10 @@ class WorkflowNodesTestCase(unittest.IsolatedAsyncioTestCase):
         list_tools_tool = _SyncTool(
             lambda args: {
                 "success": True,
-                "tools": [{"name": "unixbench"}, {"name": "superpi"}],
+                "tools": [
+                    {"name": "unixbench", "status": "installed"},
+                    {"name": "superpi", "status": "installed"},
+                ],
             }
         )
 
@@ -74,6 +78,101 @@ class WorkflowNodesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["agent_status"], "online")
         self.assertIn("unixbench", result["available_tools"])
         self.assertEqual(result["node_statuses"]["check_environment"], "completed")
+
+    async def test_check_environment_only_keeps_installed_tools(self):
+        state = {
+            "scenario": "full_assessment",
+            "errors": [],
+            "node_statuses": {},
+            "completed_nodes": [],
+        }
+
+        list_servers_tool = _SyncTool(
+            lambda args: {
+                "success": True,
+                "servers": [
+                    {
+                        "server_id": "srv-1",
+                        "ip": "118.25.19.83",
+                        "agent_id": "agent-1",
+                        "agent_status": "online",
+                    }
+                ],
+            }
+        )
+        list_tools_tool = _SyncTool(
+            lambda args: {
+                "success": True,
+                "tools": [
+                    {"name": "sysbench", "status": "not_installed"},
+                    {"name": "fio", "status": "installed"},
+                    {"name": "iperf3", "status": "not_installed"},
+                    {"name": "openssl_speed", "status": "installed"},
+                ],
+            }
+        )
+
+        result = await check_environment(
+            state,
+            tools={
+                "list_servers": list_servers_tool,
+                "list_tools": list_tools_tool,
+            },
+        )
+
+        self.assertIn("fio", result["available_tools"])
+        self.assertIn("openssl_speed", result["available_tools"])
+        self.assertNotIn("sysbench", result["available_tools"])
+        self.assertNotIn("iperf3", result["available_tools"])
+
+    async def test_check_environment_prefers_preselected_server_id(self):
+        state = {
+            "scenario": "full_assessment",
+            "server_id": "srv-118",
+            "errors": [],
+            "node_statuses": {},
+            "completed_nodes": [],
+        }
+
+        list_servers_tool = _SyncTool(
+            lambda args: {
+                "success": True,
+                "servers": [
+                    {
+                        "server_id": "srv-49",
+                        "ip": "49.234.47.133",
+                        "agent_id": "",
+                        "agent_status": "not_deployed",
+                    },
+                    {
+                        "server_id": "srv-118",
+                        "ip": "118.25.19.83",
+                        "agent_id": "agent-118",
+                        "agent_status": "online",
+                    },
+                ],
+            }
+        )
+        list_tools_tool = _SyncTool(
+            lambda args: {
+                "success": True,
+                "tools": [
+                    {"name": "fio", "status": "installed"},
+                ],
+            }
+        )
+
+        result = await check_environment(
+            state,
+            tools={
+                "list_servers": list_servers_tool,
+                "list_tools": list_tools_tool,
+            },
+        )
+
+        self.assertEqual(result["server_id"], "srv-118")
+        self.assertEqual(result["server_ip"], "118.25.19.83")
+        self.assertEqual(result["agent_status"], "online")
 
     async def test_check_tools_fails_fast_without_server_id(self):
         state = {
@@ -158,6 +257,41 @@ class WorkflowNodesTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["node_statuses"]["run_fio"], "failed")
         self.assertTrue(any("跳过 fio 测试" in err["error"] for err in result["errors"]))
+
+    async def test_generate_report_attaches_benchmark_knowledge_matches(self):
+        state = {
+            "scenario": "storage_focus",
+            "server_ip": "127.0.0.1",
+            "query": "分析 fio 随机读写性能",
+            "results": {"fio": {"success": True, "metrics": {"read_iops": 1000}}},
+            "errors": [],
+            "node_statuses": {},
+            "completed_nodes": [],
+        }
+
+        knowledge_tool = _SyncTool(
+            lambda args: {
+                "success": True,
+                "matches": [
+                    {
+                        "title": "fio",
+                        "path": "06-存储性能/fio.md",
+                        "category": "storage",
+                        "score": 42,
+                        "snippet": "fio 可用于顺序读写、随机读写和延迟测试。",
+                    }
+                ],
+            }
+        )
+
+        result = await generate_report(
+            state,
+            tools={"search_benchmark_knowledge": knowledge_tool},
+        )
+
+        self.assertEqual(result["node_statuses"]["generate_report"], "completed")
+        self.assertEqual(result["knowledge_matches"][0]["path"], "06-存储性能/fio.md")
+        self.assertIn("性能测试报告", result["final_report"])
 
     async def test_run_benchmark_times_out_instead_of_marking_completed(self):
         state = {
